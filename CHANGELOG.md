@@ -9,7 +9,7 @@
 - Режим `changeDetection = sql` в watch: обнаружение изменений конфигурации, расширений и допобработок опросом служебных таблиц MS SQL, без HTTP-сервиса в базе (по умолчанию).
 - GUI: журнал шагов запуска и работы в `logs/gui-ГГГГ-ММ-ДД.log` рядом с exe.
 - Уровни журнала `info`/`debug`, поле `logLevel` в `bases.json` и `config.json`; шаги запуска GUI пишутся только на `debug`.
-- Параметр `gitAutocrlf` в `bases.json` и `config.json` — значение `core.autocrlf` для git-команд программы (`false` по умолчанию; допустимы `true`, `input` и пустая строка).
+- Параметр `gitAutocrlf` в `bases.json` и `config.json` — значение `core.autocrlf` для git-команд программы (`false` по умолчанию; допустимы `true`, `input` и пустая строка) — и выбор на вкладке «Выгрузка» GUI.
 
 ### Изменено
 

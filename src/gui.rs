@@ -110,9 +110,6 @@ struct AppState {
     mcp_url: String,
     mcp_api_key: String,
     processings_meta_name: String,
-    /// Значение `core.autocrlf` для git-команд. На форме не редактируется:
-    /// читается из config.json и сохраняется обратно без изменений.
-    git_autocrlf: String,
 
     /// Полный текст лога (TextBox перерисовывается целиком при добавлении).
     log_text: String,
@@ -220,6 +217,8 @@ pub struct App {
     lbl_git: nwg::Label,
     r_git_domain: nwg::RadioButton,
     r_git_pwd: nwg::RadioButton,
+    lbl_git_autocrlf: nwg::Label,
+    cmb_git_autocrlf: nwg::ComboBox<String>,
     lbl_git_user: nwg::Label,
     in_git_user: nwg::TextInput,
     lbl_git_pwd: nwg::Label,
@@ -268,7 +267,6 @@ impl Default for AppState {
             mcp_url: String::new(),
             mcp_api_key: String::new(),
             processings_meta_name: "Справочник.ДополнительныеОтчетыИОбработки".to_string(),
-            git_autocrlf: "false".to_string(),
             log_text: String::new(),
             log_receiver: None,
             was_busy: false,
@@ -524,8 +522,17 @@ impl App {
         nwg::RadioButton::builder().parent(p).position((100, 354)).size((260, 24))
             .flags(nwg::RadioButtonFlags::VISIBLE | nwg::RadioButtonFlags::GROUP)
             .text("Доменная (credentials)").build(&mut self.r_git_domain)?;
-        nwg::RadioButton::builder().parent(p).position((380, 354)).size((200, 24))
+        nwg::RadioButton::builder().parent(p).position((380, 354)).size((130, 24))
             .text("Логин+пароль").build(&mut self.r_git_pwd)?;
+        // Правая часть строки «Git:» — концы строк (core.autocrlf).
+        // Ширина панели вкладки ~770, поэтому радиокнопка «Логин+пароль»
+        // сужена до 130 (её текст короче), а список занимает 620..760.
+        nwg::Label::builder().parent(p).position((520, 356)).size((95, 22))
+            .text("Концы строк:").build(&mut self.lbl_git_autocrlf)?;
+        nwg::ComboBox::builder().parent(p).position((620, 354)).size((140, 26))
+            .collection(AUTOCRLF_ITEMS.iter().map(|s| s.to_string()).collect::<Vec<String>>())
+            .selected_index(Some(0))
+            .build(&mut self.cmb_git_autocrlf)?;
         nwg::Label::builder().parent(p).position((10, 386)).size((150, 22))
             .text("Логин git:").build(&mut self.lbl_git_user)?;
         nwg::TextInput::builder().parent(p).position((170, 384)).size((180, 24))
@@ -735,13 +742,15 @@ impl App {
         self.set_radio_pair(&self.r_proc_inc, &self.r_proc_full, true);
         self.set_radio_pair(&self.r_db_win, &self.r_db_sql, true);
         self.set_radio_pair(&self.r_git_domain, &self.r_git_pwd, true);
+        // Режим одиночной базы: концы строк берём из config.json.
+        self.cmb_git_autocrlf
+            .set_selection(Some(autocrlf_to_index(&config.git_autocrlf)));
 
         {
             let mut st = self.state.borrow_mut();
             st.extensions = config.extensions.clone();
             st.mcp_url = config.mcp_url.clone();
             st.mcp_api_key = config.mcp_api_key.clone();
-            st.git_autocrlf = config.git_autocrlf.clone();
             if !config.processings_meta_name.is_empty() {
                 st.processings_meta_name = config.processings_meta_name.clone();
             }
@@ -846,6 +855,12 @@ impl App {
         c.check_state() == nwg::CheckBoxState::Checked
     }
 
+    /// Значение `core.autocrlf`, выбранное в списке «Концы строк».
+    /// Ничего не выбрано (список ещё не заполнен) — «false», как по умолчанию.
+    fn selected_autocrlf(&self) -> String {
+        autocrlf_from_index(self.cmb_git_autocrlf.selection().unwrap_or(0))
+    }
+
     /// Залить настройки выбранной базы в поля формы.
     fn apply_base_by_index(&self, idx: usize) {
         let Some(b) = self.state.borrow().bases.get(idx).cloned() else { return };
@@ -882,6 +897,8 @@ impl App {
         self.set_radio_pair(&self.r_git_domain, &self.r_git_pwd, b.git_auth_type == "domain");
         self.in_git_user.set_text(b.git_user.as_deref().unwrap_or(""));
         self.in_git_pwd.set_text(b.git_password.as_deref().unwrap_or(""));
+        self.cmb_git_autocrlf
+            .set_selection(Some(autocrlf_to_index(&b.git_autocrlf)));
         self.chk_force_push.set_check_state(bool_chk(false));
 
         {
@@ -925,8 +942,7 @@ impl App {
             mcp_api_key: st.mcp_api_key.clone(),
             processings_meta_name: st.processings_meta_name.clone(),
             git_remote_url: self.in_git_remote.text(),
-            // На форме не редактируется — сохраняем прочитанное значение.
-            git_autocrlf: st.git_autocrlf.clone(),
+            git_autocrlf: self.selected_autocrlf(),
             output_path: self.in_output.text(),
             // Уровень журнала на форме не редактируется — сохраняем действующий.
             log_level: Logger::level().as_str().to_string(),
@@ -1032,6 +1048,7 @@ impl App {
         };
         b.git_user = opt_text(self.in_git_user.text());
         b.git_password = opt_text(self.in_git_pwd.text());
+        b.git_autocrlf = self.selected_autocrlf();
     }
 
     fn reset_config(&self) {
@@ -1205,16 +1222,8 @@ impl App {
 
         let remote_url = self.in_git_remote.text();
 
-        // core.autocrlf: у выбранной базы реестра — своё значение, иначе из config.json.
-        let git_opts = {
-            let st = self.state.borrow();
-            let from_base = self
-                .cmb_base
-                .selection()
-                .and_then(|idx| st.bases.get(idx))
-                .map(|b| b.git_autocrlf.clone());
-            git_push::GitOptions::new(&from_base.unwrap_or_else(|| st.git_autocrlf.clone()))
-        };
+        // core.autocrlf — как выбрано на форме в списке «Концы строк».
+        let git_opts = git_push::GitOptions::new(&self.selected_autocrlf());
 
         let (tx, rx) = mpsc::channel::<String>();
         self.state.borrow_mut().log_receiver = Some(rx);
@@ -1365,6 +1374,8 @@ impl App {
             .set_enabled(!flags.busy && flags.had_ops && !flags.all_ok);
         self.btn_log_clear.set_enabled(!flags.busy);
         self.cmb_base.set_enabled(!flags.busy);
+        // Концы строк от режима авторизации git не зависят — блокируем только на время работы.
+        self.cmb_git_autocrlf.set_enabled(!flags.busy);
 
         // Поля логина/пароля ИБ активны только при 1С-авторизации;
         // поля БД — только при SQL-логине; поля git — при логин+пароль.
@@ -1512,6 +1523,56 @@ fn bool_chk(v: bool) -> nwg::CheckBoxState {
         nwg::CheckBoxState::Checked
     } else {
         nwg::CheckBoxState::Unchecked
+    }
+}
+
+/// Пункты списка «Концы строк» в порядке отображения. Последний означает
+/// «не передавать `core.autocrlf`», то есть действует настройка машины.
+const AUTOCRLF_ITEMS: [&str; 4] = ["false", "true", "input", "как на машине"];
+
+/// Значение `gitAutocrlf` → индекс пункта списка. Неизвестное значение — «false».
+fn autocrlf_to_index(value: &str) -> usize {
+    match value.trim() {
+        "true" => 1,
+        "input" => 2,
+        "" => 3,
+        _ => 0,
+    }
+}
+
+/// Индекс пункта списка → значение `gitAutocrlf`. Индекс вне диапазона — «false».
+fn autocrlf_from_index(idx: usize) -> String {
+    match idx {
+        1 => "true".to_string(),
+        2 => "input".to_string(),
+        3 => String::new(),
+        _ => "false".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn autocrlf_index_roundtrip() {
+        for (idx, value) in ["false", "true", "input", ""].iter().enumerate() {
+            assert_eq!(autocrlf_to_index(value), idx);
+            assert_eq!(autocrlf_from_index(idx), *value);
+        }
+    }
+
+    #[test]
+    fn autocrlf_unknown_value_and_index_fall_back_to_false() {
+        assert_eq!(autocrlf_to_index("CRLF"), 0);
+        assert_eq!(autocrlf_to_index("  input  "), 2);
+        assert_eq!(autocrlf_from_index(99), "false");
+    }
+
+    #[test]
+    fn autocrlf_items_match_indexes() {
+        assert_eq!(AUTOCRLF_ITEMS.len(), 4);
+        assert_eq!(AUTOCRLF_ITEMS[3], "как на машине");
     }
 }
 
