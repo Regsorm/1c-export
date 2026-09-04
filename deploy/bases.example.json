@@ -1,0 +1,62 @@
+{
+  "check_interval_minutes": 30,
+  "lookback_hours_first_run": 168,
+  "refetch_storage_mapping_after_days": 30,
+  "state_dir": "./state",
+  "log_dir": "./logs",
+  "logLevel": "info",
+  "trigger_events": [
+    "_$InfoBase$_.DBConfigUpdate",
+    "_$InfoBase$_.DBConfigExtensionInsert",
+    "_$InfoBase$_.DBConfigExtensionUpdate",
+    "_$InfoBase$_.DBConfigExtensionDelete"
+  ],
+  "processingsMetaName": "Справочник.ДополнительныеОтчетыИОбработки",
+  "bases": [
+    {
+      "alias": "demo-ut",
+      "sqlServer": "sql-server",
+      "server1C": "app-server-1c",
+      "sqlDatabase": "demo_ut",
+      "ibcmdDbAuthWindows": true,
+      "login": "export_user",
+      "password": "",
+      "changeDetection": "sql",
+      "ibcmdPath": "C:/Program Files/1cv8/8.3.27.1786/bin/ibcmd.exe",
+      "outputPath": "C:/Repos/demo-ut",
+      "gitRemoteUrl": "https://git.example.com/1c/demo-ut.git",
+      "gitAutocrlf": "false",
+      "gitAuthType": "domain",
+      "exportBase": true,
+      "exportExtensions": true,
+      "exportProcessings": true,
+      "ibcmdSync": true,
+      "ibcmdIncremental": true,
+      "processingsIncremental": true,
+      "saveArtifacts": false,
+      "ibcmdJobs": 4,
+      "gitGcAfterPush": false,
+      "gitGcAggressive": false
+    },
+    {
+      "alias": "demo-bp",
+      "sqlServer": "sql-server",
+      "sqlDatabase": "demo_bp",
+      "ibcmdDbAuthWindows": false,
+      "dbUser": "sa",
+      "dbPwd": "",
+      "login": "export_user",
+      "password": "",
+      "changeDetection": "eventlog",
+      "mcpUrl": "http://app-server-1c/demo-bp/hs/mcp",
+      "mcpApiKey": "",
+      "ibcmdPath": "C:/Program Files/1cv8/8.3.27.1786/bin/ibcmd.exe",
+      "outputPath": "C:/Repos/demo-bp",
+      "gitRemoteUrl": "https://git.example.com/1c/demo-bp.git",
+      "gitAuthType": "password",
+      "gitUser": "svc-export",
+      "gitPassword": "",
+      "exportProcessings": false
+    }
+  ]
+}

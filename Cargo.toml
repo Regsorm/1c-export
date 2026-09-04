@@ -1,0 +1,58 @@
+[package]
+name = "onec-export"
+version = "3.0.0"
+edition = "2021"
+description = "CLI/GUI для выгрузки конфигурации 1С через IBCMD"
+license = "MIT"
+repository = "https://github.com/Regsorm/1c-export"
+readme = "README.md"
+
+[[bin]]
+name = "1c-export"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"
+thiserror = "2"
+anyhow = "1"
+encoding_rs = "0.8"
+# GUI на нативных Win32-контролах (GDI): работает на любых серверах/RDP/VM
+# без GPU и OpenGL. История: egui(glow) требовал OpenGL 2.0+ (в RDP только 1.1),
+# а программный рендер WARP ронял DWM в RDP-сессии — оба пути отброшены.
+native-windows-gui = { version = "1.0.13", features = ["all"] }
+
+# SQL-выгрузка справочника ДополнительныеОтчетыИОбработки (processings.rs)
+tiberius = { version = "0.12", default-features = false, features = ["rustls", "chrono", "tds73", "winauth"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "macros", "io-util", "time", "sync"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+futures = "0.3"
+flate2 = "1"
+md-5 = "0.10"
+regex = "1"
+hex = "0.4"
+
+# Watch-mode (1c-export.exe watch)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+sha2 = "0.10"
+single-instance = "0.3"
+
+# Локальная SQLite для хешей дельты (расширения + допобработки) и истории
+# выгрузок. `bundled` вкомпилирует SQLite в exe — на сервере не нужны DLL.
+rusqlite = { version = "0.32", features = ["bundled"] }
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile = "3"
+
+# Встраивание манифеста приложения в exe (см. build.rs): без него в процессе
+# оказываются две версии comctl32 и GUI виснет на старте.
+[build-dependencies]
+embed-resource = "3"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true

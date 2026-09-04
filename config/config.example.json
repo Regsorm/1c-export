@@ -1,0 +1,18 @@
+{
+  "sqlServer": "sql-server",
+  "server1C": "app-server-1c",
+  "database": "demo-ut",
+  "sqlDatabase": "demo_ut",
+  "authentication": {
+    "type": "password",
+    "login": "export_user",
+    "password": ""
+  },
+  "ibcmdPath": "C:/Program Files/1cv8/8.3.27.1786/bin/ibcmd.exe",
+  "outputPath": "C:/Repos/demo-ut",
+  "gitRemoteUrl": "https://git.example.com/1c/demo-ut.git",
+  "gitAutocrlf": "false",
+  "logLevel": "info",
+  "saveArtifacts": false,
+  "extensions": []
+}
