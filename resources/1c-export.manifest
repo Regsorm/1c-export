@@ -3,7 +3,7 @@
   <assemblyIdentity
       type="win32"
       name="1c-export"
-      version="3.0.0.0"
+      version="3.1.0.0"
       processorArchitecture="amd64"
   />
   <!-- Явная зависимость от Common-Controls 6.0: без неё импорт comctl32

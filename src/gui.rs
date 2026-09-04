@@ -309,7 +309,7 @@ impl App {
             .flags(nwg::WindowFlags::MAIN_WINDOW | nwg::WindowFlags::VISIBLE)
             .size((800, 780))
             .position((250, 80))
-            .title("Выгрузка конфигурации 1С (IBCMD) — v3.0.0")
+            .title(&format!("Выгрузка конфигурации 1С (IBCMD) — v{}", env!("CARGO_PKG_VERSION")))
             .build(&mut app.window)?;
         Logger::debug("GUI: окно создано");
 
