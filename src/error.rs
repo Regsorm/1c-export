@@ -18,9 +18,6 @@ pub enum ExportError {
     #[error("Ошибка JSON: {0}")]
     Json(#[from] serde_json::Error),
 
-    #[error("Платформа 1С не найдена: {0}")]
-    PlatformNotFound(String),
-
     #[error("IBCMD не найден: {0}")]
     IbcmdNotFound(String),
 

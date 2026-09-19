@@ -41,11 +41,7 @@ pub enum PayloadKind {
 /// XML-сигнатуры, по которым ищем XML-payload даже за бинарным префиксом.
 /// Порядок важен: `<?xml` ловит общий случай, специфические root-элементы
 /// дают шанс распознать XML без `<?xml`-декларации.
-const XML_NEEDLES: &[&[u8]] = &[
-    b"<?xml",
-    b"<SchemaFile",
-    b"<DataCompositionSchema",
-];
+const XML_NEEDLES: &[&[u8]] = &[b"<?xml", b"<SchemaFile", b"<DataCompositionSchema"];
 
 /// Найти offset подпоследовательности `needle` в `haystack`, либо `None`.
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -217,7 +213,8 @@ mod tests {
 
     #[test]
     fn detects_dcs_xml() {
-        let data = br#"<?xml version="1.0" encoding="UTF-8"?><SchemaFile xmlns="..."></SchemaFile>"#;
+        let data =
+            br#"<?xml version="1.0" encoding="UTF-8"?><SchemaFile xmlns="..."></SchemaFile>"#;
         assert_eq!(detect_payload_kind(data), PayloadKind::DcsXml);
     }
 
@@ -242,7 +239,8 @@ mod tests {
 
     #[test]
     fn detects_bsl_module_with_directive() {
-        let (cow, _, _) = WINDOWS_1251.encode("&НаСервере\nПроцедура ПриСозданииНаСервере()\nКонецПроцедуры");
+        let (cow, _, _) =
+            WINDOWS_1251.encode("&НаСервере\nПроцедура ПриСозданииНаСервере()\nКонецПроцедуры");
         assert_eq!(detect_payload_kind(&cow), PayloadKind::BslModule);
     }
 
@@ -252,7 +250,9 @@ mod tests {
         // UTF-8 BOM + пробел + "Функция ..." (UTF-8). Должен детектиться как
         // BslModule, не уходить в Unknown.
         let mut data = vec![0xEF, 0xBB, 0xBF, 0x20];
-        data.extend_from_slice("Функция СведенияОВнешнейОбработке() Экспорт\nКонецФункции".as_bytes());
+        data.extend_from_slice(
+            "Функция СведенияОВнешнейОбработке() Экспорт\nКонецФункции".as_bytes(),
+        );
         assert_eq!(detect_payload_kind(&data), PayloadKind::BslModule);
     }
 
@@ -261,16 +261,21 @@ mod tests {
     #[test]
     #[ignore]
     fn debug_real_unknown_bin() {
-        let path = std::path::Path::new(
-            r"C:\Temp\v8container_test\_unknown\text.bin",
-        );
+        let path = std::path::Path::new(r"C:\Temp\v8container_test\_unknown\text.bin");
         if !path.exists() {
             eprintln!("файл не найден: {}", path.display());
             return;
         }
         let bytes = std::fs::read(path).expect("read");
-        eprintln!("size: {}, first 16 hex: {}", bytes.len(),
-            bytes[..16.min(bytes.len())].iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "));
+        eprintln!(
+            "size: {}, first 16 hex: {}",
+            bytes.len(),
+            bytes[..16.min(bytes.len())]
+                .iter()
+                .map(|b| format!("{:02X}", b))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
 
         let kind = detect_payload_kind(&bytes);
         eprintln!("detect_payload_kind: {kind:?}");

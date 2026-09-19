@@ -4,7 +4,11 @@
 use crate::logging::Logger;
 
 pub async fn send(proxy_url: &str, base_alias: &str) {
-    let url = format!("{}/flush?base={}", proxy_url.trim_end_matches('/'), base_alias);
+    let url = format!(
+        "{}/flush?base={}",
+        proxy_url.trim_end_matches('/'),
+        base_alias
+    );
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()

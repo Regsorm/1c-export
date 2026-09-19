@@ -64,10 +64,9 @@ pub struct ExportLogEntry {
     pub error: Option<String>,
 }
 
-/// Строка журнала на чтение (для GUI). Включает id и repo.
+/// Строка журнала на чтение (для GUI).
 #[derive(Debug, Clone)]
 pub struct ExportLogRow {
-    pub id: i64,
     pub repo: String,
     pub finished_at: String,
     pub duration_sec: Option<u64>,
@@ -210,8 +209,8 @@ impl StateDb {
         let tx = self.conn.transaction()?;
         tx.execute("DELETE FROM ext_hashes WHERE repo = ?1", [repo])?;
         {
-            let mut stmt = tx
-                .prepare("INSERT INTO ext_hashes (repo, name, hash) VALUES (?1, ?2, ?3)")?;
+            let mut stmt =
+                tx.prepare("INSERT INTO ext_hashes (repo, name, hash) VALUES (?1, ?2, ?3)")?;
             for (name, hash) in hashes {
                 stmt.execute(rusqlite::params![repo, name, hash])?;
             }
@@ -365,21 +364,20 @@ impl StateDb {
     ) -> anyhow::Result<Vec<ExportLogRow>> {
         let map_row = |r: &rusqlite::Row| -> rusqlite::Result<ExportLogRow> {
             Ok(ExportLogRow {
-                id: r.get(0)?,
-                repo: r.get(1)?,
-                finished_at: r.get(2)?,
-                duration_sec: r.get::<_, Option<i64>>(3)?.map(|v| v as u64),
-                status: r.get(4)?,
-                events: r.get::<_, Option<i64>>(5)?.map(|v| v as u64),
-                details: r.get(6)?,
-                error: r.get(7)?,
+                repo: r.get(0)?,
+                finished_at: r.get(1)?,
+                duration_sec: r.get::<_, Option<i64>>(2)?.map(|v| v as u64),
+                status: r.get(3)?,
+                events: r.get::<_, Option<i64>>(4)?.map(|v| v as u64),
+                details: r.get(5)?,
+                error: r.get(6)?,
             })
         };
         let mut out = Vec::new();
         match repo {
             Some(repo) => {
                 let mut stmt = self.conn.prepare(
-                    "SELECT id, repo, finished_at, duration_sec, status, events, details, error \
+                    "SELECT repo, finished_at, duration_sec, status, events, details, error \
                      FROM export_log WHERE repo = ?1 ORDER BY id DESC LIMIT ?2",
                 )?;
                 let rows = stmt.query_map(rusqlite::params![repo, limit as i64], map_row)?;
@@ -389,7 +387,7 @@ impl StateDb {
             }
             None => {
                 let mut stmt = self.conn.prepare(
-                    "SELECT id, repo, finished_at, duration_sec, status, events, details, error \
+                    "SELECT repo, finished_at, duration_sec, status, events, details, error \
                      FROM export_log ORDER BY id DESC LIMIT ?1",
                 )?;
                 let rows = stmt.query_map(rusqlite::params![limit as i64], map_row)?;

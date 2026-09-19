@@ -1,6 +1,6 @@
+use crate::logging::Logger;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use crate::logging::Logger;
 
 /// CREATE_NO_WINDOW = 0x08000000. Без него Windows-loader для дочернего процесса
 /// создаёт собственное чёрное консольное окно (родитель — windows-subsystem GUI).
@@ -10,7 +10,9 @@ fn no_window(cmd: &mut Command) -> &mut Command {
     cmd.creation_flags(0x08000000)
 }
 #[cfg(not(windows))]
-fn no_window(cmd: &mut Command) -> &mut Command { cmd }
+fn no_window(cmd: &mut Command) -> &mut Command {
+    cmd
+}
 
 /// CREATE_NEW_CONSOLE = 0x00000010. Принудительно создаёт **новое видимое
 /// консольное окно** для дочернего процесса. Используется для `git push` —
@@ -21,7 +23,9 @@ fn new_console(cmd: &mut Command) -> &mut Command {
     cmd.creation_flags(0x00000010)
 }
 #[cfg(not(windows))]
-fn new_console(cmd: &mut Command) -> &mut Command { cmd }
+fn new_console(cmd: &mut Command) -> &mut Command {
+    cmd
+}
 
 /// Тип авторизации в git-remote (GitLab)
 #[derive(Debug, Clone)]
@@ -36,8 +40,7 @@ pub enum GitAuth {
 
 /// Результат git-push операции
 pub struct GitPushResult {
-    pub committed: bool,   // был ли сделан commit (false = нет изменений)
-    pub pushed: bool,      // был ли сделан push
+    pub committed: bool, // был ли сделан commit (false = нет изменений)
 }
 
 /// Настройки git, которые программа передаёт своим командам ключами `-c`.
@@ -50,14 +53,18 @@ pub struct GitOptions {
 
 impl Default for GitOptions {
     fn default() -> Self {
-        Self { autocrlf: "false".to_string() }
+        Self {
+            autocrlf: "false".to_string(),
+        }
     }
 }
 
 impl GitOptions {
     /// Настройки из значения параметра конфигурации (`gitAutocrlf`).
     pub fn new(autocrlf: &str) -> Self {
-        Self { autocrlf: autocrlf.trim().to_string() }
+        Self {
+            autocrlf: autocrlf.trim().to_string(),
+        }
     }
 }
 
@@ -93,7 +100,11 @@ fn git_command(repo: &Path, opts: &GitOptions) -> Command {
 /// Запуск git-команды в каталоге `repo`. Возвращает stdout при успехе.
 fn run_git(repo: &Path, args: &[&str], opts: &GitOptions) -> Result<String, String> {
     let display_args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
-    Logger::log(&format!("  git -C {} {}", repo.display(), display_args.join(" ")));
+    Logger::log(&format!(
+        "  git -C {} {}",
+        repo.display(),
+        display_args.join(" ")
+    ));
 
     let mut cmd = git_command(repo, opts);
     cmd.args(args)
@@ -150,7 +161,11 @@ fn run_git_code(repo: &Path, args: &[&str], opts: &GitOptions) -> Result<i32, St
 /// от новой консоли, поэтому git выводит туда. Возвращает только код возврата —
 /// текстовый stdout/stderr перехватить нельзя (он уже в окне).
 fn run_git_push_visible(repo: &Path, args: &[&str], opts: &GitOptions) -> Result<i32, String> {
-    Logger::log(&format!("  git -C {} {}", repo.display(), mask_url_creds(&args.join(" "))));
+    Logger::log(&format!(
+        "  git -C {} {}",
+        repo.display(),
+        mask_url_creds(&args.join(" "))
+    ));
     Logger::log("  (push идёт в отдельном консольном окне с прогрессом — закрывать его не надо)");
 
     let mut cmd = git_command(repo, opts);
@@ -172,7 +187,11 @@ fn run_git_push_captured(
     args: &[&str],
     opts: &GitOptions,
 ) -> Result<(i32, String), String> {
-    Logger::log(&format!("  git -C {} {}", repo.display(), mask_url_creds(&args.join(" "))));
+    Logger::log(&format!(
+        "  git -C {} {}",
+        repo.display(),
+        mask_url_creds(&args.join(" "))
+    ));
 
     let mut cmd = git_command(repo, opts);
     cmd.args(args)
@@ -277,7 +296,11 @@ fn inject_credentials(url: &str, user: &str, password: &str) -> String {
         Some(at_pos) => {
             // Осторожно: `@` может встречаться и после `/` в пути — проверим что перед `@` нет `/`
             let slash_pos = rest.find('/').unwrap_or(usize::MAX);
-            if at_pos < slash_pos { &rest[at_pos + 1..] } else { rest }
+            if at_pos < slash_pos {
+                &rest[at_pos + 1..]
+            } else {
+                rest
+            }
         }
         None => rest,
     };
@@ -408,7 +431,11 @@ pub fn commit_and_push_with_console(
         } else {
             // `--progress` рассчитан на терминал: в перехвате он даёт десятки
             // строк «Counting objects: 3%… 6%…» и забивает лог. Убираем.
-            let quiet: Vec<&str> = args.iter().copied().filter(|a| *a != "--progress").collect();
+            let quiet: Vec<&str> = args
+                .iter()
+                .copied()
+                .filter(|a| *a != "--progress")
+                .collect();
             run_git_push_captured(repo, &quiet, opts)
         }
     };
@@ -431,7 +458,8 @@ pub fn commit_and_push_with_console(
                 do_push(&["push", "--progress"])?
             } else {
                 let branch = run_git(repo, &["rev-parse", "--abbrev-ref", "HEAD"], opts)?
-                    .trim().to_string();
+                    .trim()
+                    .to_string();
                 Logger::log(&format!(
                     "  (у ветки {} нет upstream — пушим с --set-upstream origin {})",
                     branch, branch
@@ -441,17 +469,22 @@ pub fn commit_and_push_with_console(
         }
         GitAuth::UserPassword { user, password } => {
             let url_raw = run_git(repo, &["remote", "get-url", "origin"], opts)?
-                .trim().to_string();
+                .trim()
+                .to_string();
             if url_raw.is_empty() {
                 return Err("не удалось получить URL origin".to_string());
             }
             let url_with_creds = inject_credentials(&url_raw, user, password);
             // В лог выводим URL без пароля
             let safe_url = inject_credentials(&url_raw, user, "***");
-            Logger::log(&format!("  (push через URL с подстановкой credentials: {})", safe_url));
+            Logger::log(&format!(
+                "  (push через URL с подстановкой credentials: {})",
+                safe_url
+            ));
             // Получаем текущую ветку, чтобы сделать явный push <url> HEAD:<branch>
             let branch = run_git(repo, &["rev-parse", "--abbrev-ref", "HEAD"], opts)?
-                .trim().to_string();
+                .trim()
+                .to_string();
             let refspec = format!("HEAD:{}", branch);
             do_push(&["push", "--progress", &url_with_creds, &refspec])?
         }
@@ -473,7 +506,7 @@ pub fn commit_and_push_with_console(
     }
 
     Logger::log("✓ GIT: синхронизация завершена успешно");
-    Ok(GitPushResult { committed, pushed: true })
+    Ok(GitPushResult { committed })
 }
 
 /// Сформировать сообщение коммита по шаблону "Update_yyyyMMdd"
@@ -538,7 +571,11 @@ fn human_size(bytes: u64) -> String {
 pub fn git_gc(repo: &Path, aggressive: bool, opts: &GitOptions) -> Result<(), String> {
     let git_dir = repo.join(".git");
     let before = dir_size_bytes(&git_dir).unwrap_or(0);
-    let mode_label = if aggressive { "--aggressive --prune=now" } else { "--auto" };
+    let mode_label = if aggressive {
+        "--aggressive --prune=now"
+    } else {
+        "--auto"
+    };
     Logger::log(&format!(
         "git gc {} (.git/ = {})",
         mode_label,
@@ -589,7 +626,11 @@ mod tests {
         );
         let masked = mask_secret(&text, "p@ss");
         assert!(!masked.contains("p@ss"), "пароль остался: {}", masked);
-        assert!(!masked.contains("p%40ss"), "URL-кодированный пароль остался: {}", masked);
+        assert!(
+            !masked.contains("p%40ss"),
+            "URL-кодированный пароль остался: {}",
+            masked
+        );
         // Пустой пароль (доменная авторизация) — текст не трогаем.
         assert_eq!(mask_secret(&text, ""), text);
     }
@@ -629,7 +670,11 @@ mod tests {
         let tail = error_tail(out);
         assert!(tail.contains("failed to push some refs"));
         assert!(tail.contains("remote rejected"));
-        assert!(!tail.contains("Counting objects"), "взяты лишние строки: {}", tail);
+        assert!(
+            !tail.contains("Counting objects"),
+            "взяты лишние строки: {}",
+            tail
+        );
         assert_eq!(error_tail(""), "");
         // Длинный вывод обрезается.
         let long = "x".repeat(500);
@@ -661,7 +706,10 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         assert_ne!(rc, 0, "push в несуществующий репозиторий должен падать");
         assert!(!text.trim().is_empty(), "текст ошибки git не перехвачен");
-        assert!(!error_tail(&text).is_empty(), "из вывода не собрался текст для журнала");
+        assert!(
+            !error_tail(&text).is_empty(),
+            "из вывода не собрался текст для журнала"
+        );
     }
 
     #[test]
@@ -677,7 +725,10 @@ mod tests {
             vec!["-c", "core.autocrlf=input", "-c", "gc.auto=0"]
         );
         // Пустое значение — параметр не передаётся, действует настройка машины.
-        assert_eq!(config_args(&GitOptions::new("   ")), vec!["-c", "gc.auto=0"]);
+        assert_eq!(
+            config_args(&GitOptions::new("   ")),
+            vec!["-c", "gc.auto=0"]
+        );
 
         // Те же аргументы попадают в саму команду, после `-C <каталог>`.
         let cmd = git_command(Path::new("C:/Repos/demo-ut"), &GitOptions::default());
@@ -687,7 +738,14 @@ mod tests {
             .collect();
         assert_eq!(
             args,
-            vec!["-C", "C:/Repos/demo-ut", "-c", "core.autocrlf=false", "-c", "gc.auto=0"]
+            vec![
+                "-C",
+                "C:/Repos/demo-ut",
+                "-c",
+                "core.autocrlf=false",
+                "-c",
+                "gc.auto=0"
+            ]
         );
     }
 
@@ -708,7 +766,12 @@ mod tests {
         run_git(&dir, &["init", "-b", "main"], &opts).unwrap();
         // Автор коммита — только в этом репозитории, глобальные настройки не трогаем.
         run_git(&dir, &["config", "user.name", "export-test"], &opts).unwrap();
-        run_git(&dir, &["config", "user.email", "export-test@example.invalid"], &opts).unwrap();
+        run_git(
+            &dir,
+            &["config", "user.email", "export-test@example.invalid"],
+            &opts,
+        )
+        .unwrap();
         std::fs::write(dir.join("file.txt"), "первая\nвторая\n").unwrap();
 
         let res = commit_and_push_with_console(&dir, "test", &GitAuth::Domain, false, &opts);
@@ -718,7 +781,11 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&dir);
         assert!(eol.contains("file.txt"), "файл не попал в индекс: {}", eol);
-        assert!(eol.contains("i/lf"), "концы строк в индексе изменены: {}", eol);
+        assert!(
+            eol.contains("i/lf"),
+            "концы строк в индексе изменены: {}",
+            eol
+        );
     }
 
     #[test]

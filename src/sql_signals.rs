@@ -54,7 +54,10 @@ fn fingerprint(lines: &[String]) -> String {
 /// Выражение для поля-маркера изменения — то же, что в лёгком diff-запросе выгрузки.
 fn hash_select(field_hash: &str, hash_is_binary: bool) -> String {
     if hash_is_binary {
-        format!("CONVERT(VARCHAR(130), CAST({} AS VARBINARY(64)), 2)", field_hash)
+        format!(
+            "CONVERT(VARCHAR(130), CAST({} AS VARBINARY(64)), 2)",
+            field_hash
+        )
     } else {
         format!("RTRIM(CONVERT(NVARCHAR(64), {}))", field_hash)
     }
@@ -199,7 +202,10 @@ mod tests {
 
     #[test]
     fn fingerprint_is_stable_and_sensitive() {
-        let a = vec!["ext1|2026-09-04|1".to_string(), "ext2|2026-09-04|2".to_string()];
+        let a = vec![
+            "ext1|2026-09-04|1".to_string(),
+            "ext2|2026-09-04|2".to_string(),
+        ];
         let b = a.clone();
         assert_eq!(fingerprint(&a), fingerprint(&b));
 
@@ -209,7 +215,7 @@ mod tests {
         assert_ne!(fingerprint(&a), fingerprint(&c));
 
         // Удаление строки тоже.
-        assert_ne!(fingerprint(&a), fingerprint(&a[..1].to_vec()));
+        assert_ne!(fingerprint(&a), fingerprint(&a[..1]));
 
         // Пустой список даёт не пустую строку, а свёртку пустого текста.
         assert_eq!(fingerprint(&[]).len(), 64);
@@ -239,7 +245,10 @@ mod tests {
         };
         assert!(StoredMappingLite::from_stored(&m).hash_is_binary);
 
-        let m2 = StoredMapping { field_hash: "_Fld4777".into(), ..m };
+        let m2 = StoredMapping {
+            field_hash: "_Fld4777".into(),
+            ..m
+        };
         assert!(!StoredMappingLite::from_stored(&m2).hash_is_binary);
     }
 
@@ -259,7 +268,10 @@ mod tests {
             processings: "bb".into(),
             taken_at: "t2".into(),
         };
-        let prev = SqlSignals { taken_at: "t1".into(), ..cur.clone() };
+        let prev = SqlSignals {
+            taken_at: "t1".into(),
+            ..cur.clone()
+        };
         // Время снятия отпечатков на сравнение не влияет.
         assert!(diff_signals(Some(&prev), &cur, &scope_all()).is_empty());
     }
@@ -300,7 +312,11 @@ mod tests {
             taken_at: String::new(),
         };
         // База выгружает только основную конфигурацию — остальные различия не считаются.
-        let scope = SignalScope { base: true, extensions: false, processings: None };
+        let scope = SignalScope {
+            base: true,
+            extensions: false,
+            processings: None,
+        };
         let reasons = diff_signals(Some(&prev), &cur, &scope);
         assert_eq!(reasons.len(), 1);
         assert!(reasons[0].contains("основная конфигурация"));
@@ -315,18 +331,28 @@ mod tests {
             taken_at: String::new(),
         };
         // Изменились только расширения — основная конфигурация не менялась.
-        let only_ext = SqlSignals { extensions: "e2".into(), ..prev.clone() };
+        let only_ext = SqlSignals {
+            extensions: "e2".into(),
+            ..prev.clone()
+        };
         assert!(!config_changed(Some(&prev), &only_ext, &scope_all()));
 
         // Сдвинулся отпечаток Config — менялась.
-        let cfg_moved = SqlSignals { config: "c2".into(), ..prev.clone() };
+        let cfg_moved = SqlSignals {
+            config: "c2".into(),
+            ..prev.clone()
+        };
         assert!(config_changed(Some(&prev), &cfg_moved, &scope_all()));
 
         // Первый опрос — считаем изменением.
         assert!(config_changed(None, &prev, &scope_all()));
 
         // Основная конфигурация не выгружается — признака нет.
-        let scope = SignalScope { base: false, extensions: true, processings: None };
+        let scope = SignalScope {
+            base: false,
+            extensions: true,
+            processings: None,
+        };
         assert!(!config_changed(None, &prev, &scope));
     }
 }

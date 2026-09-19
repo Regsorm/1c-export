@@ -124,16 +124,26 @@ impl BaseState {
         fs::write(&tmp_path, text)
             .map_err(|e| anyhow::anyhow!("запись {}: {}", tmp_path.display(), e))?;
         // На Windows std::fs::rename перезаписывает целевой файл (с MoveFileExW + REPLACE_EXISTING).
-        fs::rename(&tmp_path, &final_path)
-            .map_err(|e| anyhow::anyhow!("rename {} → {}: {}", tmp_path.display(), final_path.display(), e))?;
+        fs::rename(&tmp_path, &final_path).map_err(|e| {
+            anyhow::anyhow!(
+                "rename {} → {}: {}",
+                tmp_path.display(),
+                final_path.display(),
+                e
+            )
+        })?;
         Ok(())
     }
 
     /// Нужно ли заново вызвать `db_table_fields` (нет mapping
     /// либо он старее N дней).
     pub fn needs_storage_refetch(&self, ttl_days: u64) -> bool {
-        let Some(ref m) = self.storage_mapping else { return true; };
-        let Ok(dt) = parse_iso8601(&m.fetched_at) else { return true; };
+        let Some(ref m) = self.storage_mapping else {
+            return true;
+        };
+        let Ok(dt) = parse_iso8601(&m.fetched_at) else {
+            return true;
+        };
         let age_secs = (Utc::now() - dt).num_seconds().max(0) as u64;
         age_secs > ttl_days * 86400
     }
@@ -191,7 +201,10 @@ mod tests {
         s.save(dir.path()).unwrap();
 
         let loaded = BaseState::load(dir.path(), "ut").unwrap();
-        assert_eq!(loaded.last_processed_at.as_deref(), Some("2026-04-26T21:02:38"));
+        assert_eq!(
+            loaded.last_processed_at.as_deref(),
+            Some("2026-04-26T21:02:38")
+        );
         assert_eq!(loaded.processed_hashes_at_last_dt, vec!["abc", "def"]);
         assert_eq!(loaded.consecutive_failures, 2);
         let m = loaded.storage_mapping.as_ref().unwrap();
@@ -215,7 +228,10 @@ mod tests {
         s.save(dir.path()).unwrap();
         let loaded = BaseState::load(dir.path(), "ut").unwrap();
         assert_eq!(loaded.sql_signals.as_ref().unwrap().extensions, "aa11");
-        assert_eq!(loaded.sql_signals.as_ref().unwrap().config, "2026-09-04 10:00:00.000|1234");
+        assert_eq!(
+            loaded.sql_signals.as_ref().unwrap().config,
+            "2026-09-04 10:00:00.000|1234"
+        );
 
         // Старый state-файл без поля sql_signals читается, отпечатков просто нет.
         std::fs::write(dir.path().join("old.json"), r#"{"alias":"old"}"#).unwrap();
@@ -233,8 +249,10 @@ mod tests {
     fn needs_refetch_when_old() {
         let s = BaseState {
             storage_mapping: Some(StoredMapping {
-                table: "x".into(), field_storage: "x".into(),
-                field_hash: "x".into(), field_kind: "x".into(),
+                table: "x".into(),
+                field_storage: "x".into(),
+                field_hash: "x".into(),
+                field_kind: "x".into(),
                 enum_table: "x".into(),
                 // 100 дней назад
                 fetched_at: (Utc::now() - chrono::Duration::days(100)).to_rfc3339(),
@@ -248,8 +266,10 @@ mod tests {
     fn no_refetch_when_fresh() {
         let s = BaseState {
             storage_mapping: Some(StoredMapping {
-                table: "x".into(), field_storage: "x".into(),
-                field_hash: "x".into(), field_kind: "x".into(),
+                table: "x".into(),
+                field_storage: "x".into(),
+                field_hash: "x".into(),
+                field_kind: "x".into(),
                 enum_table: "x".into(),
                 fetched_at: Utc::now().to_rfc3339(),
             }),

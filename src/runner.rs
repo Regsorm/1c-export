@@ -1,9 +1,9 @@
+use crate::error::ExportError;
+use crate::logging::Logger;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
-use crate::error::ExportError;
-use crate::logging::Logger;
 
 /// Декодирование вывода консольной утилиты Windows.
 /// ibcmd на Windows с русской локалью пишет в CP866 (консольная)
@@ -54,7 +54,11 @@ pub fn mask_command(args: &[String]) -> String {
     for arg in args {
         let masked = if next_is_secret {
             next_is_secret = false;
-            if arg.is_empty() { arg.clone() } else { "***".to_string() }
+            if arg.is_empty() {
+                arg.clone()
+            } else {
+                "***".to_string()
+            }
         } else if let Some((key, value)) = arg.split_once('=') {
             if is_secret_key(key) && !value.is_empty() {
                 format!("{}=***", key)
@@ -195,8 +199,14 @@ impl ProcessRunner {
         let mut stderr_acc = String::new();
         for (kind, line) in rx.iter() {
             match kind {
-                0 => { stdout_acc.push_str(&line); stdout_acc.push('\n'); }
-                _ => { stderr_acc.push_str(&line); stderr_acc.push('\n'); }
+                0 => {
+                    stdout_acc.push_str(&line);
+                    stdout_acc.push('\n');
+                }
+                _ => {
+                    stderr_acc.push_str(&line);
+                    stderr_acc.push('\n');
+                }
             }
         }
 
@@ -210,7 +220,8 @@ impl ProcessRunner {
         } else {
             Logger::log(&format!(
                 "✗ Ошибка выполнения (код возврата: {}, время: {:.1} сек)",
-                return_code, elapsed.as_secs_f64()
+                return_code,
+                elapsed.as_secs_f64()
             ));
         }
 
@@ -258,7 +269,10 @@ mod tests {
 
     #[test]
     fn masks_short_pwd_key() {
-        assert_eq!(mask_command(&v(&["ibcmd.exe", "--pwd=abc"])), "ibcmd.exe --pwd=***");
+        assert_eq!(
+            mask_command(&v(&["ibcmd.exe", "--pwd=abc"])),
+            "ibcmd.exe --pwd=***"
+        );
     }
 
     #[test]
@@ -271,8 +285,14 @@ mod tests {
     fn empty_password_stays_as_is() {
         // Скрывать нечего — ключ остаётся читаемым.
         let empty_key = format!("--{}=", "password");
-        assert_eq!(mask_command(&v(&["ibcmd.exe", &empty_key])), "ibcmd.exe --password=");
-        assert_eq!(mask_command(&v(&["ibcmd.exe", "--password", ""])), "ibcmd.exe --password ");
+        assert_eq!(
+            mask_command(&v(&["ibcmd.exe", &empty_key])),
+            "ibcmd.exe --password="
+        );
+        assert_eq!(
+            mask_command(&v(&["ibcmd.exe", "--password", ""])),
+            "ibcmd.exe --password "
+        );
         // Одинокий `/P` без значения — не пароль, не трогаем.
         assert_eq!(mask_command(&v(&["1cv8.exe", "/P"])), "1cv8.exe /P");
     }
@@ -320,7 +340,11 @@ mod tests {
             "--password=НастоящийПароль",
             "E:/export\\extensions\\Имя",
         ]));
-        assert!(!out.contains("НастоящийПароль"), "пароль остался в строке журнала: {}", out);
+        assert!(
+            !out.contains("НастоящийПароль"),
+            "пароль остался в строке журнала: {}",
+            out
+        );
         assert!(out.contains("--password=***"));
         assert!(out.contains("--user=export_user"));
     }

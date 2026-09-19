@@ -28,7 +28,11 @@ enum Trigger {
     /// Режим sql: причины расхождения отпечатков и сами отпечатки, снятые ДО выгрузки.
     /// `config_changed` — сдвинулся ли отпечаток основной конфигурации: от него
     /// зависит, переписывать ли бинарный снимок `_artifacts/base.cf`.
-    Signals { reasons: Vec<String>, signals: SqlSignals, config_changed: bool },
+    Signals {
+        reasons: Vec<String>,
+        signals: SqlSignals,
+        config_changed: bool,
+    },
 }
 
 /// Главная точка входа watch-режима. Бесконечный цикл.
@@ -36,13 +40,18 @@ enum Trigger {
 pub async fn run(cfg: DaemonConfig, once: bool) -> anyhow::Result<()> {
     Logger::log(&format!(
         "watch: старт. баз={}, interval={}мин, once={}",
-        cfg.bases.len(), cfg.check_interval_minutes, once
+        cfg.bases.len(),
+        cfg.check_interval_minutes,
+        once
     ));
 
     loop {
         let cycle_start = chrono::Local::now();
         Logger::separator();
-        Logger::log(&format!("=== ЦИКЛ старт: {} ===", cycle_start.format("%Y-%m-%d %H:%M:%S")));
+        Logger::log(&format!(
+            "=== ЦИКЛ старт: {} ===",
+            cycle_start.format("%Y-%m-%d %H:%M:%S")
+        ));
 
         for base in &cfg.bases {
             let _ = process_one_base_safe(&cfg, base).await;
@@ -58,7 +67,10 @@ pub async fn run(cfg: DaemonConfig, once: bool) -> anyhow::Result<()> {
             return Ok(());
         }
         let sleep_secs = cfg.check_interval_minutes.saturating_mul(60);
-        Logger::log(&format!("watch: sleep {}с (≈{}мин)", sleep_secs, cfg.check_interval_minutes));
+        Logger::log(&format!(
+            "watch: sleep {}с (≈{}мин)",
+            sleep_secs, cfg.check_interval_minutes
+        ));
         tokio::time::sleep(tokio::time::Duration::from_secs(sleep_secs)).await;
     }
 }
@@ -94,7 +106,10 @@ async fn process_one_base_safe(cfg: &DaemonConfig, base: &BaseEntry) {
         ) {
             Ok(c) => Some(c),
             Err(e) => {
-                Logger::log(&format!("[{}] не удалось создать McpClient: {:#}", base.alias, e));
+                Logger::log(&format!(
+                    "[{}] не удалось создать McpClient: {:#}",
+                    base.alias, e
+                ));
                 return;
             }
         }
@@ -104,7 +119,10 @@ async fn process_one_base_safe(cfg: &DaemonConfig, base: &BaseEntry) {
 
     match process_one_base(mcp.as_ref(), cfg, base, &app_config, &mut state).await {
         Ok(events_count) => {
-            Logger::log(&format!("[{}] цикл завершён: обработано событий = {}", base.alias, events_count));
+            Logger::log(&format!(
+                "[{}] цикл завершён: обработано событий = {}",
+                base.alias, events_count
+            ));
         }
         Err(e) => {
             Logger::log(&format!("[{}] ОШИБКА: {:#}", base.alias, e));
@@ -122,7 +140,10 @@ async fn process_one_base_safe(cfg: &DaemonConfig, base: &BaseEntry) {
                 });
             }
             if let Err(save_err) = state.save(&state_dir) {
-                Logger::log(&format!("[{}] не удалось сохранить state: {:#}", base.alias, save_err));
+                Logger::log(&format!(
+                    "[{}] не удалось сохранить state: {:#}",
+                    base.alias, save_err
+                ));
             }
             if state.consecutive_failures >= 3 {
                 Logger::log(&format!(
@@ -140,7 +161,7 @@ async fn process_one_base(
     mcp: Option<&McpClient>,
     cfg: &DaemonConfig,
     base: &BaseEntry,
-    app_config: &crate::config::AppConfig,
+    _app_config: &crate::config::AppConfig,
     state: &mut BaseState,
 ) -> anyhow::Result<usize> {
     let state_dir = PathBuf::from(&cfg.state_dir);
@@ -162,7 +183,9 @@ async fn process_one_base(
     };
 
     // 1. storage_mapping (если нужен для допобработок) — fetch при первом запуске или раз в N дней.
-    if base.export_processings && state.needs_storage_refetch(cfg.refetch_storage_mapping_after_days) {
+    if base.export_processings
+        && state.needs_storage_refetch(cfg.refetch_storage_mapping_after_days)
+    {
         // Имя справочника — глобальное на весь сервер (см. DaemonConfig.processings_meta_name).
         // Если в bases.json не задано — встроенный дефолт.
         let meta_name = if !cfg.processings_meta_name.is_empty() {
@@ -235,7 +258,10 @@ async fn process_one_base(
                 base: base.export_base,
                 extensions: base.export_extensions,
                 processings: if base.export_processings {
-                    state.storage_mapping.as_ref().map(StoredMappingLite::from_stored)
+                    state
+                        .storage_mapping
+                        .as_ref()
+                        .map(StoredMappingLite::from_stored)
                 } else {
                     None
                 },
@@ -247,7 +273,11 @@ async fn process_one_base(
             let reasons = diff_signals(state.sql_signals.as_ref(), &signals, &scope);
             let config_changed =
                 crate::sql_signals::config_changed(state.sql_signals.as_ref(), &signals, &scope);
-            Trigger::Signals { reasons, signals, config_changed }
+            Trigger::Signals {
+                reasons,
+                signals,
+                config_changed,
+            }
         }
     };
     state.last_checked_at = Some(chrono::Utc::now().to_rfc3339());
@@ -272,7 +302,8 @@ async fn process_one_base(
         Trigger::Events(events) => {
             Logger::log(&format!(
                 "[{}] найдено {} новых событий, запускаем выгрузку",
-                base.alias, events.len()
+                base.alias,
+                events.len()
             ));
             for e in events.iter().take(5) {
                 Logger::log(&format!("    {} | {} | {}", e.date, e.event, e.user));
@@ -284,7 +315,8 @@ async fn process_one_base(
         Trigger::Signals { reasons, .. } => {
             Logger::log(&format!(
                 "[{}] обнаружены изменения ({}), запускаем выгрузку",
-                base.alias, reasons.len()
+                base.alias,
+                reasons.len()
             ));
             for r in reasons {
                 Logger::log(&format!("    {}", r));
@@ -294,7 +326,10 @@ async fn process_one_base(
 
     // 3. In-process выгрузка через ExportCoordinator (sync — выполняем в spawn_blocking)
     let mapping_for_proc: Option<ProcStorageMapping> = if base.export_processings {
-        let m = state.storage_mapping.as_ref().expect("mapping должен быть после fetch выше");
+        let m = state
+            .storage_mapping
+            .as_ref()
+            .expect("mapping должен быть после fetch выше");
         Some(ProcStorageMapping {
             table: m.table.clone(),
             field_storage: m.field_storage.clone(),
@@ -319,14 +354,16 @@ async fn process_one_base(
     let base_clone = base.clone();
     let cfg_state_dir = state_dir.clone();
     let _ = cfg_state_dir; // силенсер если не используется
-    let export_result = tokio::task::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         run_export_for_base(&base_clone, mapping_for_proc, config_changed)
     })
     .await
     .map_err(|join_err| anyhow::anyhow!("spawn_blocking упал: {}", join_err))??;
-    let _ = export_result;
     let duration = started.elapsed().as_secs();
-    Logger::log(&format!("[{}] выгрузка завершена за {}с", base.alias, duration));
+    Logger::log(&format!(
+        "[{}] выгрузка завершена за {}с",
+        base.alias, duration
+    ));
 
     // 4. git push
     let auth = match base.git_auth_type.as_str() {

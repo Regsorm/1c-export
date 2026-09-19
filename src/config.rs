@@ -1,6 +1,6 @@
+use crate::error::ExportError;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use crate::error::ExportError;
 
 /// Тип аутентификации
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,7 +62,11 @@ pub struct AppConfig {
     /// отчёты и обработки БСП. Нужен и для параметра `table` в `db_table_fields`,
     /// и для парсинга ответа. По умолчанию "Справочник.ДополнительныеОтчетыИОбработки".
     /// Вынесено в конфиг на случай ребрендинга в будущих версиях БСП.
-    #[serde(default, rename = "processingsMetaName", alias = "processings_meta_name")]
+    #[serde(
+        default,
+        rename = "processingsMetaName",
+        alias = "processings_meta_name"
+    )]
     pub processings_meta_name: String,
     /// URL удалённого git-репозитория (origin) для «Git commit & push» из GUI.
     /// Пусто — origin должен быть настроен в репозитории выгрузки заранее.
@@ -72,13 +76,21 @@ pub struct AppConfig {
     /// По умолчанию "false": файлы хранятся так, как их выдал ibcmd, без
     /// перекодировки концов строк. Допустимо "true", "input" и пустая строка
     /// (параметр не передаётся — действует настройка машины).
-    #[serde(default = "default_git_autocrlf", rename = "gitAutocrlf", alias = "git_autocrlf")]
+    #[serde(
+        default = "default_git_autocrlf",
+        rename = "gitAutocrlf",
+        alias = "git_autocrlf"
+    )]
     pub git_autocrlf: String,
     #[serde(rename = "outputPath")]
     pub output_path: String,
     /// Подробность журнала: "info" (дефолт) или "debug". Неизвестное значение
     /// трактуется как "info" — отдельной валидации нет.
-    #[serde(default = "default_log_level", rename = "logLevel", alias = "log_level")]
+    #[serde(
+        default = "default_log_level",
+        rename = "logLevel",
+        alias = "log_level"
+    )]
     pub log_level: String,
     /// Сохранять бинарные снимки `_artifacts/base.cf` и `_artifacts/extensions/<имя>.cfe`
     /// через `ibcmd config save`. По умолчанию выключено.
@@ -88,8 +100,12 @@ pub struct AppConfig {
     pub extensions: Vec<String>,
 }
 
-fn default_log_level() -> String { "info".to_string() }
-fn default_git_autocrlf() -> String { "false".to_string() }
+fn default_log_level() -> String {
+    "info".to_string()
+}
+fn default_git_autocrlf() -> String {
+    "false".to_string()
+}
 
 impl AppConfig {
     /// Построить AppConfig из BaseEntry — все настройки watch-режима лежат там одной
@@ -152,7 +168,8 @@ impl AppConfig {
         }
 
         Err(ExportError::Config(
-            "Файл конфигурации config/config.json не найден. Укажите путь через --config".to_string()
+            "Файл конфигурации config/config.json не найден. Укажите путь через --config"
+                .to_string(),
         ))
     }
 
@@ -240,6 +257,7 @@ impl AppConfig {
     ///   - CLI `--export-processings` без override-флагов и без кэша `_manifest.json`
     ///     (разовый автодискавери через `1cv8.exe ENTERPRISE /C BatchGet…`),
     ///   - Designer-команды дампа .epf/.erf (`designer_dump_epf`).
+    ///
     /// В watch-пути не вызывается никогда.
     pub fn platform_1cv8_path(&self) -> Result<PathBuf, ExportError> {
         let ibcmd = Path::new(&self.ibcmd_path);

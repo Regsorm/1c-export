@@ -33,16 +33,11 @@ use crate::v8container::error::{Result, V8ContainerError};
 
 /// Версия контейнера: 32-битные смещения (классический V1) или 64-битные
 /// (V2, платформа 8.3.16+).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ContainerKind {
+    #[default]
     V1,
     V2,
-}
-
-impl Default for ContainerKind {
-    fn default() -> Self {
-        ContainerKind::V1
-    }
 }
 
 impl ContainerKind {
@@ -144,7 +139,7 @@ fn read_u32_le(bytes: &[u8], offset: usize) -> Result<u32> {
     bytes
         .get(offset..offset + 4)
         .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
-        .ok_or_else(|| V8ContainerError::OffsetOutOfRange {
+        .ok_or(V8ContainerError::OffsetOutOfRange {
             offset: offset as u64,
             file_size: bytes.len() as u64,
         })
@@ -154,7 +149,7 @@ fn read_u64_le(bytes: &[u8], offset: usize) -> Result<u64> {
     bytes
         .get(offset..offset + 8)
         .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
-        .ok_or_else(|| V8ContainerError::OffsetOutOfRange {
+        .ok_or(V8ContainerError::OffsetOutOfRange {
             offset: offset as u64,
             file_size: bytes.len() as u64,
         })
@@ -226,12 +221,12 @@ pub fn read_file_header(bytes: &[u8], kind: ContainerKind) -> Result<FileHeader>
 pub fn read_block_header(bytes: &[u8], offset: u64, kind: ContainerKind) -> Result<BlockHeader> {
     let header_size = kind.block_header_size();
     let off = offset as usize;
-    let buf = bytes.get(off..off + header_size).ok_or_else(|| {
-        V8ContainerError::OffsetOutOfRange {
+    let buf = bytes
+        .get(off..off + header_size)
+        .ok_or(V8ContainerError::OffsetOutOfRange {
             offset,
             file_size: bytes.len() as u64,
-        }
-    })?;
+        })?;
 
     if &buf[0..2] != b"\r\n" {
         return Err(V8ContainerError::BadBlockHeader {
@@ -273,18 +268,20 @@ pub fn read_document(bytes: &[u8], offset: u64, kind: ContainerKind) -> Result<V
     let first = read_block_header(bytes, offset, kind)?;
     let first_data_off = offset as usize + header_size;
     let first_take = first.doc_size.min(first.block_size) as usize;
-    let first_end = first_data_off
-        .checked_add(first_take)
-        .ok_or(V8ContainerError::OffsetOutOfRange {
-            offset: first_data_off as u64,
-            file_size: bytes.len() as u64,
-        })?;
-    let first_slice = bytes
-        .get(first_data_off..first_end)
-        .ok_or(V8ContainerError::OffsetOutOfRange {
-            offset: first_data_off as u64,
-            file_size: bytes.len() as u64,
-        })?;
+    let first_end =
+        first_data_off
+            .checked_add(first_take)
+            .ok_or(V8ContainerError::OffsetOutOfRange {
+                offset: first_data_off as u64,
+                file_size: bytes.len() as u64,
+            })?;
+    let first_slice =
+        bytes
+            .get(first_data_off..first_end)
+            .ok_or(V8ContainerError::OffsetOutOfRange {
+                offset: first_data_off as u64,
+                file_size: bytes.len() as u64,
+            })?;
 
     let mut output = Vec::with_capacity(first.doc_size as usize);
     output.extend_from_slice(first_slice);
@@ -420,11 +417,7 @@ pub(crate) mod test_support {
     /// Записать документ как один блок (data умещается целиком). Возвращает оффсет.
     fn append_single_block_doc(buf: &mut Vec<u8>, data: &[u8]) -> u32 {
         let offset = buf.len() as u32;
-        let header = build_block_header(
-            data.len() as u64,
-            data.len() as u64,
-            END_MARKER as u64,
-        );
+        let header = build_block_header(data.len() as u64, data.len() as u64, END_MARKER as u64);
         buf.extend_from_slice(&header);
         buf.extend_from_slice(data);
         offset
@@ -466,10 +459,8 @@ pub(crate) mod test_support {
     /// Собрать V1-контейнер из набора `(name, data)`. Простейший layout: TOC после
     /// header'а, затем последовательно описатели и данные файлов. Без padding'а.
     pub fn build_v1_container(files: &[(&str, &[u8])]) -> Vec<u8> {
-        let mut buf = Vec::new();
-
         // Резервируем место под header (16 байт) — заполним позже.
-        buf.resize(HEADER_SIZE, 0);
+        let mut buf = vec![0; HEADER_SIZE];
 
         // TOC документ — положим заглушку, потом перепишем.
         // Реально TOC = массив троек (descr_off, data_off, end_marker) по 4 байта.
@@ -478,7 +469,11 @@ pub(crate) mod test_support {
         let toc_off = buf.len() as u64;
         // Пока запишем zeros для блока (хедер + данные).
         let toc_block_header_off = buf.len();
-        buf.extend_from_slice(&build_block_header(toc_len as u64, toc_len as u64, END_MARKER as u64));
+        buf.extend_from_slice(&build_block_header(
+            toc_len as u64,
+            toc_len as u64,
+            END_MARKER as u64,
+        ));
         let toc_data_off = buf.len();
         buf.resize(toc_data_off + toc_len, 0);
         let _ = toc_off;
@@ -581,8 +576,7 @@ mod tests {
 
     #[test]
     fn unpack_unicode_filename() {
-        let bytes =
-            build_v1_container(&[("ОбработкаПроведения.bsl", "Процедура".as_bytes())]);
+        let bytes = build_v1_container(&[("ОбработкаПроведения.bsl", "Процедура".as_bytes())]);
         let v8 = unpack(&bytes).unwrap();
         assert_eq!(v8.entries[0].name, "ОбработкаПроведения.bsl");
         assert_eq!(v8.entries[0].data, "Процедура".as_bytes());
@@ -592,11 +586,10 @@ mod tests {
     fn document_chain_reassembled() {
         // Большая полезная нагрузка, которая физически разбита на блоки —
         // проверяем склейку.
-        let payload: Vec<u8> = (0..1000u32).flat_map(|i| (i as u32).to_le_bytes()).collect();
-        let mut buf = Vec::new();
+        let payload: Vec<u8> = (0..1000u32).flat_map(|i| i.to_le_bytes()).collect();
         // Header (16 байт), потом TOC и data — собираем напрямую через
         // append_multi_block_doc для проверки склейки.
-        buf.resize(16, 0);
+        let mut buf = vec![0; 16];
         // TOC с одной записью.
         let toc_len = 12;
         buf.extend_from_slice(b"\r\n");
@@ -614,7 +607,11 @@ mod tests {
         // Описатель файла (минимальный — 22 байта).
         let mut descr = Vec::new();
         descr.extend_from_slice(&[0u8; 20]);
-        descr.extend_from_slice(&"x".encode_utf16().flat_map(u16::to_le_bytes).collect::<Vec<_>>());
+        descr.extend_from_slice(
+            &"x".encode_utf16()
+                .flat_map(u16::to_le_bytes)
+                .collect::<Vec<_>>(),
+        );
         descr.extend_from_slice(&[0, 0]);
         let descr_off = append_multi_block_doc(&mut buf, &descr, 0x40);
         // Данные файла, разрезаем мелкими блоками — проверяем chain.
@@ -646,7 +643,8 @@ mod tests {
     #[test]
     #[ignore]
     fn unpack_real_epf() {
-        let path = std::path::Path::new(r"C:\Projects\ОбработкаВыгрузкиHBK\РедактированиеHBK_WebKit.epf");
+        let path =
+            std::path::Path::new(r"C:\Projects\ОбработкаВыгрузкиHBK\РедактированиеHBK_WebKit.epf");
         if !path.exists() {
             eprintln!("фикстура не найдена: {}", path.display());
             return;
@@ -691,15 +689,21 @@ mod tests {
         for entry in &v8.entries {
             // Если данные начинаются с маркера контейнера — это вложенный 1CV8
             // (потенциально DCS-контейнер с UUID e41aff26 внутри).
-            let nested_marker = entry.data.len() >= 4
-                && entry.data[0..4] == [0xFF, 0xFF, 0xFF, 0x7F];
+            let nested_marker =
+                entry.data.len() >= 4 && entry.data[0..4] == [0xFF, 0xFF, 0xFF, 0x7F];
             // Эвристика: если данные начинаются с UTF-8 BOM или похожи на текст
             // (печатаемые ASCII в первых байтах после декомпрессии).
             let inflated = crate::v8container::try_inflate(&entry.data);
             let preview: String = inflated
                 .iter()
                 .take(80)
-                .map(|&b| if (32..127).contains(&b) || b == b'\n' || b == b'\r' || b == b'\t' { b as char } else { '.' })
+                .map(|&b| {
+                    if (32..127).contains(&b) || b == b'\n' || b == b'\r' || b == b'\t' {
+                        b as char
+                    } else {
+                        '.'
+                    }
+                })
                 .collect();
             eprintln!(
                 "  {} ({} bytes, inflated {} bytes, nested_v8={}) head: {}",
@@ -718,10 +722,8 @@ mod tests {
         // Внутренний контейнер.
         let inner_bytes = build_v1_container(&[("inner.txt", b"hello from inside")]);
         // Внешний содержит внутренний как один из файлов.
-        let outer_bytes = build_v1_container(&[
-            ("plain.txt", b"plain data"),
-            ("nested.bin", &inner_bytes),
-        ]);
+        let outer_bytes =
+            build_v1_container(&[("plain.txt", b"plain data"), ("nested.bin", &inner_bytes)]);
 
         let outer = unpack(&outer_bytes).unwrap();
         assert_eq!(outer.entries.len(), 2);

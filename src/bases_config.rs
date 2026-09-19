@@ -23,7 +23,6 @@ pub struct DaemonConfig {
     #[serde(default = "default_lookback_first_run")]
     pub lookback_hours_first_run: u64,
 
-
     /// URL прокси-кэша (когда появится). Если null — flush не отправляется.
     #[serde(default)]
     pub cache_proxy_url: Option<String>,
@@ -43,7 +42,11 @@ pub struct DaemonConfig {
 
     /// Подробность журнала: "info" (дефолт) или "debug". Неизвестное значение
     /// трактуется как "info" — отдельной валидации нет.
-    #[serde(default = "default_log_level", rename = "logLevel", alias = "log_level")]
+    #[serde(
+        default = "default_log_level",
+        rename = "logLevel",
+        alias = "log_level"
+    )]
     pub log_level: String,
 
     /// Whitelist системных событий 1С — триггеров выгрузки.
@@ -54,7 +57,11 @@ pub struct DaemonConfig {
     /// Полное имя справочника допобработок в метаданных 1С (БСП-функционал, имя
     /// одно для всех баз с БСП). По умолчанию "Справочник.ДополнительныеОтчетыИОбработки".
     /// На уровне `BaseEntry` есть опциональный per-base override.
-    #[serde(default, rename = "processingsMetaName", alias = "processings_meta_name")]
+    #[serde(
+        default,
+        rename = "processingsMetaName",
+        alias = "processings_meta_name"
+    )]
     pub processings_meta_name: String,
 
     /// Список баз под наблюдением.
@@ -100,7 +107,11 @@ pub struct BaseEntry {
 
     /// Использовать Windows-аутентификацию для коннектов к MSSQL. Дефолт true.
     /// Если false — нужны `dbUser` / `dbPwd`.
-    #[serde(default = "default_true", rename = "ibcmdDbAuthWindows", alias = "ibcmd_db_auth_windows")]
+    #[serde(
+        default = "default_true",
+        rename = "ibcmdDbAuthWindows",
+        alias = "ibcmd_db_auth_windows"
+    )]
     pub ibcmd_db_auth_windows: bool,
 
     /// Логин SQL Server (для SQL-аутентификации). Уходит и в IBCMD (`--db-user`),
@@ -133,6 +144,7 @@ pub struct BaseEntry {
     ///   1. Basic Auth к HTTP-сервису MCP (`Authorization: Basic ...`).
     ///   2. IBCMD `--user=...` для команд `config export` / `config save` /
     ///      расширений — авторизация в самой ИБ 1С.
+    ///
     /// Это один и тот же пользователь ИБ — оба канала идут через Apache на сервер 1С.
     pub login: String,
 
@@ -150,7 +162,11 @@ pub struct BaseEntry {
     pub output_path: String,
 
     /// Способ git-аутентификации: "domain" (Credential Manager / git helper) или "password".
-    #[serde(default = "default_git_auth", rename = "gitAuthType", alias = "git_auth_type")]
+    #[serde(
+        default = "default_git_auth",
+        rename = "gitAuthType",
+        alias = "git_auth_type"
+    )]
     pub git_auth_type: String,
 
     /// Логин git для `gitAuthType = "password"`.
@@ -171,7 +187,11 @@ pub struct BaseEntry {
     /// По умолчанию "false": файлы хранятся так, как их выдал ibcmd, без
     /// перекодировки концов строк. Допустимо "true", "input" и пустая строка
     /// (параметр не передаётся — действует настройка машины).
-    #[serde(default = "default_git_autocrlf", rename = "gitAutocrlf", alias = "git_autocrlf")]
+    #[serde(
+        default = "default_git_autocrlf",
+        rename = "gitAutocrlf",
+        alias = "git_autocrlf"
+    )]
     pub git_autocrlf: String,
 
     // ── Флаги выгрузки ──────────────────────────────────────────────────────
@@ -180,7 +200,11 @@ pub struct BaseEntry {
     pub export_base: bool,
 
     /// Выгружать расширения.
-    #[serde(default = "default_true", rename = "exportExtensions", alias = "export_extensions")]
+    #[serde(
+        default = "default_true",
+        rename = "exportExtensions",
+        alias = "export_extensions"
+    )]
     pub export_extensions: bool,
 
     /// Выгружать справочник ДополнительныеОтчетыИОбработки (через MSSQL).
@@ -198,12 +222,20 @@ pub struct BaseEntry {
     pub ibcmd_sync: bool,
 
     /// Инкрементальная выгрузка расширений по hash из git.
-    #[serde(default = "default_true", rename = "ibcmdIncremental", alias = "ibcmd_incremental")]
+    #[serde(
+        default = "default_true",
+        rename = "ibcmdIncremental",
+        alias = "ibcmd_incremental"
+    )]
     pub ibcmd_incremental: bool,
 
     /// Инкрементальная выгрузка допобработок (true) или полная перезапись (false,
     /// с предварительной чисткой External/ целиком). Аналог ibcmdIncremental.
-    #[serde(default = "default_true", rename = "processingsIncremental", alias = "processings_incremental")]
+    #[serde(
+        default = "default_true",
+        rename = "processingsIncremental",
+        alias = "processings_incremental"
+    )]
     pub processings_incremental: bool,
 
     /// Количество потоков IBCMD (0 = автоматически).
@@ -226,15 +258,33 @@ pub struct BaseEntry {
 
 // ── Default-функции для serde ────────────────────────────────────────────
 
-fn default_check_interval_minutes() -> u64 { 30 }
-fn default_lookback_first_run() -> u64 { 168 }
-fn default_refetch_storage() -> u64 { 30 }
-fn default_state_dir() -> String { "./state".to_string() }
-fn default_log_dir() -> String { "./logs".to_string() }
-fn default_log_level() -> String { "info".to_string() }
-fn default_git_auth() -> String { "domain".to_string() }
-fn default_git_autocrlf() -> String { "false".to_string() }
-fn default_true() -> bool { true }
+fn default_check_interval_minutes() -> u64 {
+    30
+}
+fn default_lookback_first_run() -> u64 {
+    168
+}
+fn default_refetch_storage() -> u64 {
+    30
+}
+fn default_state_dir() -> String {
+    "./state".to_string()
+}
+fn default_log_dir() -> String {
+    "./logs".to_string()
+}
+fn default_log_level() -> String {
+    "info".to_string()
+}
+fn default_git_auth() -> String {
+    "domain".to_string()
+}
+fn default_git_autocrlf() -> String {
+    "false".to_string()
+}
+fn default_true() -> bool {
+    true
+}
 fn default_trigger_events() -> Vec<String> {
     vec![
         "_$InfoBase$_.DBConfigUpdate".to_string(),
@@ -277,7 +327,10 @@ impl DaemonConfig {
                 anyhow::bail!("alias '{}' встречается дважды в bases[]", b.alias);
             }
             if b.output_path.trim().is_empty() {
-                anyhow::bail!("alias '{}': outputPath пустой (это и каталог выгрузки, и git-репо)", b.alias);
+                anyhow::bail!(
+                    "alias '{}': outputPath пустой (это и каталог выгрузки, и git-репо)",
+                    b.alias
+                );
             }
             if b.sql_server.trim().is_empty() {
                 anyhow::bail!("alias '{}': sqlServer пустой", b.alias);
@@ -297,9 +350,7 @@ impl DaemonConfig {
             if b.login.trim().is_empty() {
                 anyhow::bail!("alias '{}': login пустой", b.alias);
             }
-            if b.git_auth_type == "password"
-                && (b.git_user.is_none() || b.git_password.is_none())
-            {
+            if b.git_auth_type == "password" && (b.git_user.is_none() || b.git_password.is_none()) {
                 anyhow::bail!(
                     "alias '{}': git_auth_type=password требует git_user и git_password",
                     b.alias
@@ -312,9 +363,7 @@ impl DaemonConfig {
                     b.git_autocrlf
                 );
             }
-            if !b.ibcmd_db_auth_windows
-                && (b.db_user.is_none() || b.db_pwd.is_none())
-            {
+            if !b.ibcmd_db_auth_windows && (b.db_user.is_none() || b.db_pwd.is_none()) {
                 anyhow::bail!(
                     "alias '{}': ibcmd_db_auth_windows=false требует db_user и db_pwd",
                     b.alias
@@ -471,7 +520,11 @@ mod tests {
         let cfg3: DaemonConfig = serde_json::from_str(&json3).unwrap();
         let err = format!("{}", cfg3.validate().unwrap_err());
         assert!(err.contains("gitAutocrlf"), "нет имени параметра: {}", err);
-        assert!(err.contains("input"), "нет перечня допустимых значений: {}", err);
+        assert!(
+            err.contains("input"),
+            "нет перечня допустимых значений: {}",
+            err
+        );
     }
 
     #[test]
@@ -489,7 +542,10 @@ mod tests {
             Some("ut")
         );
         // Чужой каталог и пустая строка — алиаса нет, ключ останется прежним.
-        assert_eq!(alias_for_output_path_in(&cfg.bases, "C:/Repos/demo-bp"), None);
+        assert_eq!(
+            alias_for_output_path_in(&cfg.bases, "C:/Repos/demo-bp"),
+            None
+        );
         assert_eq!(alias_for_output_path_in(&cfg.bases, "  "), None);
     }
 
@@ -636,7 +692,10 @@ mod tests {
         );
         let json = format!(r#"{{ "bases": [{}] }}"#, base);
         let cfg: DaemonConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(cfg.bases[0].git_remote_url, "https://gitlab.example/repo.git");
+        assert_eq!(
+            cfg.bases[0].git_remote_url,
+            "https://gitlab.example/repo.git"
+        );
 
         // snake_case-alias тоже читается (обратная совместимость).
         let base2 = minimal_base_json().replacen(
@@ -652,7 +711,10 @@ mod tests {
         let out = serde_json::to_string_pretty(&cfg).unwrap();
         assert!(out.contains("\"gitRemoteUrl\""));
         let back: DaemonConfig = serde_json::from_str(&out).unwrap();
-        assert_eq!(back.bases[0].git_remote_url, "https://gitlab.example/repo.git");
+        assert_eq!(
+            back.bases[0].git_remote_url,
+            "https://gitlab.example/repo.git"
+        );
 
         // отсутствие ключа → пустая строка (default), не ошибка парсинга.
         let json3 = format!(r#"{{ "bases": [{}] }}"#, minimal_base_json());

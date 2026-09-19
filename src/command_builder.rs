@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use crate::config::{AppConfig, AuthType};
+use std::path::{Path, PathBuf};
 
 /// Тип авторизации на СУБД MSSQL для IBCMD
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,7 +53,11 @@ impl IbcmdBuilder {
     /// (напр. `extension list`).
     fn add_db_connection(cmd: &mut Vec<String>, params: &IbcmdParams, config: &AppConfig) {
         if params.use_connection_string {
-            cmd.push(format!("--ibconnection=Srvr={};Ref={}", config.server_for_1c(), config.database));
+            cmd.push(format!(
+                "--ibconnection=Srvr={};Ref={}",
+                config.server_for_1c(),
+                config.database
+            ));
         } else {
             cmd.push(format!("--db-server={}", config.server));
             cmd.push(format!("--dbms={}", params.dbms));
@@ -111,9 +115,15 @@ impl IbcmdBuilder {
 
     /// Выгрузка одного расширения: `config export --extension=<name>`.
     /// Расширения всегда перезаписываются полностью (без --sync).
-    pub fn export_extension(params: &IbcmdParams, config: &AppConfig, ext_name: &str) -> Vec<String> {
+    pub fn export_extension(
+        params: &IbcmdParams,
+        config: &AppConfig,
+        ext_name: &str,
+    ) -> Vec<String> {
         let mut cmd = Self::base(params, "config");
-        let output = Path::new(&config.output_path).join("extensions").join(ext_name);
+        let output = Path::new(&config.output_path)
+            .join("extensions")
+            .join(ext_name);
 
         cmd.push("export".to_string());
         cmd.push(format!("--extension={}", ext_name));
@@ -143,6 +153,7 @@ impl IbcmdBuilder {
     /// ВАЖНО (эмпирические факты, проверено 2026-05-03 на ibcmd 8.3.27.1786):
     /// - `--threads=N` НЕ принимается (выдаёт «Ошибка разбора параметра», exit=2).
     /// - `--file=<путь>` тоже НЕ принимается. Путь — ТОЛЬКО позиционный аргумент в конце.
+    ///
     /// См. карточка #1154 в обеих базах знаний.
     pub fn save_base(params: &IbcmdParams, config: &AppConfig) -> Vec<String> {
         let mut cmd = Self::base(params, "config");
@@ -230,15 +241,27 @@ mod tests {
         assert_eq!(cmd[1], "infobase");
         assert_eq!(cmd[2], "config");
         assert_eq!(cmd[3], "save");
-        assert!(!cmd.iter().any(|s| s.starts_with("--threads")),
-            "config save не принимает --threads: {:?}", cmd);
-        assert!(!cmd.iter().any(|s| s.starts_with("--file=")),
-            "config save не принимает --file=, путь только позиционный: {:?}", cmd);
+        assert!(
+            !cmd.iter().any(|s| s.starts_with("--threads")),
+            "config save не принимает --threads: {:?}",
+            cmd
+        );
+        assert!(
+            !cmd.iter().any(|s| s.starts_with("--file=")),
+            "config save не принимает --file=, путь только позиционный: {:?}",
+            cmd
+        );
         assert!(cmd.iter().any(|s| s == "--user=export_user"));
         let last = cmd.last().unwrap();
-        assert!(last.ends_with(r"_artifacts\base.cf") || last.ends_with("_artifacts/base.cf"),
-            "позиционный путь к base.cf: {}", last);
-        assert!(!cmd.iter().any(|s| s.starts_with("--extension")), "save_base не должен содержать --extension");
+        assert!(
+            last.ends_with(r"_artifacts\base.cf") || last.ends_with("_artifacts/base.cf"),
+            "позиционный путь к base.cf: {}",
+            last
+        );
+        assert!(
+            !cmd.iter().any(|s| s.starts_with("--extension")),
+            "save_base не должен содержать --extension"
+        );
     }
 
     #[test]
@@ -250,16 +273,27 @@ mod tests {
         assert_eq!(cmd[1], "infobase");
         assert_eq!(cmd[2], "config");
         assert_eq!(cmd[3], "save");
-        assert!(cmd.iter().any(|s| s == "--extension=ДоработкаУТ"),
-            "должен быть --extension=ДоработкаУТ: {:?}", cmd);
-        assert!(!cmd.iter().any(|s| s.starts_with("--threads")),
-            "config save --extension тоже не принимает --threads: {:?}", cmd);
+        assert!(
+            cmd.iter().any(|s| s == "--extension=ДоработкаУТ"),
+            "должен быть --extension=ДоработкаУТ: {:?}",
+            cmd
+        );
+        assert!(
+            !cmd.iter().any(|s| s.starts_with("--threads")),
+            "config save --extension тоже не принимает --threads: {:?}",
+            cmd
+        );
         // Путь — позиционный аргумент (последний), не --file=
         let last = cmd.last().unwrap();
-        assert!(last.ends_with(r"_artifacts\extensions\ДоработкаУТ.cfe")
+        assert!(
+            last.ends_with(r"_artifacts\extensions\ДоработкаУТ.cfe")
                 || last.ends_with("_artifacts/extensions/ДоработкаУТ.cfe"),
-            "позиционный путь к .cfe: {}", last);
-        assert!(!cmd.iter().any(|s| s.starts_with("--file=")),
-            "save_extension использует позиционный путь, не --file=");
+            "позиционный путь к .cfe: {}",
+            last
+        );
+        assert!(
+            !cmd.iter().any(|s| s.starts_with("--file=")),
+            "save_extension использует позиционный путь, не --file="
+        );
     }
 }

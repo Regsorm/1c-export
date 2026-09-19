@@ -1,11 +1,11 @@
-use std::collections::HashMap;
-use std::path::Path;
-use chrono::Local;
-use crate::config::AppConfig;
 use crate::command_builder::{IbcmdBuilder, IbcmdParams};
+use crate::config::AppConfig;
+use crate::logging::Logger;
 use crate::processings::{self, ProcessingsResult, StorageMapping};
 use crate::runner::ProcessRunner;
-use crate::logging::Logger;
+use chrono::Local;
+use std::collections::HashMap;
+use std::path::Path;
 
 /// CLI-параметры выгрузки допобработок, которые приходят из main.rs
 /// (не совпадают с `ProcessingsParams` из модуля processings — там ещё креды
@@ -104,7 +104,11 @@ impl ExportResults {
         if let Some(ref pr) = self.processings {
             parts.push(format!(
                 "допобработки: new={} changed={} unchanged={} deleted={} failed={}",
-                pr.new, pr.changed, pr.unchanged, pr.deleted, pr.failed.len()
+                pr.new,
+                pr.changed,
+                pr.unchanged,
+                pr.deleted,
+                pr.failed.len()
             ));
         }
         parts.join("; ")
@@ -149,7 +153,11 @@ pub fn record_export_log(repo: &str, results: &ExportResults, duration_sec: u64)
         repo: repo.to_string(),
         finished_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
         duration_sec: Some(duration_sec),
-        status: if success { "ok".to_string() } else { "fail".to_string() },
+        status: if success {
+            "ok".to_string()
+        } else {
+            "fail".to_string()
+        },
         events: None,
         details: Some(results.summary()),
         error: None,
@@ -201,7 +209,7 @@ impl ExportCoordinator {
     /// - `--sync` — инкрементальная синхронизация, папка НЕ очищается.
     /// - `--force` — полная перезапись, папка base/ очищается перед выгрузкой
     ///   (ibcmd отказывается писать в непустую папку, флаг --force документацией
-    ///    привязан к --sync и реально не помогает для перезаписи папки).
+    ///   привязан к --sync и реально не помогает для перезаписи папки).
     /// - `save_artifacts` — дополнительно писать бинарный снимок `_artifacts/base.cf`.
     /// - `config_changed` — менялась ли основная конфигурация (см. `need_base_artifact`).
     pub fn export_base(
@@ -294,7 +302,7 @@ impl ExportCoordinator {
         if needs_full_retry {
             Logger::log(
                 "⚠ ibcmd: «Требуется экспортировать конфигурацию полностью» — \
-                 ConfigDumpInfo.xml несовместим. Авто-retry с `--force` (полный дамп)."
+                 ConfigDumpInfo.xml несовместим. Авто-retry с `--force` (полный дамп).",
             );
             let mut retry = effective.clone();
             retry.sync = false;
@@ -302,12 +310,20 @@ impl ExportCoordinator {
             // Чистим папку base/ — после --force ibcmd хочет писать в пустую.
             if base_dir.exists() {
                 if let Err(e) = std::fs::remove_dir_all(&base_dir) {
-                    Logger::log(&format!("✗ Авто-retry: очистка {} упала: {}", base_dir.display(), e));
+                    Logger::log(&format!(
+                        "✗ Авто-retry: очистка {} упала: {}",
+                        base_dir.display(),
+                        e
+                    ));
                     return false;
                 }
             }
             if let Err(e) = std::fs::create_dir_all(&base_dir) {
-                Logger::log(&format!("✗ Авто-retry: создание {} упало: {}", base_dir.display(), e));
+                Logger::log(&format!(
+                    "✗ Авто-retry: создание {} упало: {}",
+                    base_dir.display(),
+                    e
+                ));
                 return false;
             }
             let retry_cmd = IbcmdBuilder::export_base(&retry, &self.config);
@@ -391,25 +407,41 @@ impl ExportCoordinator {
         let artifact_path = Path::new(&self.config.output_path)
             .join("_artifacts")
             .join("base.cf");
-        let artifact_dir = artifact_path.parent().expect("у base.cf всегда есть parent");
+        let artifact_dir = artifact_path
+            .parent()
+            .expect("у base.cf всегда есть parent");
 
         if let Err(e) = std::fs::create_dir_all(artifact_dir) {
-            Logger::log(&format!("⚠ CF-артефакт: не удалось создать {}: {}", artifact_dir.display(), e));
+            Logger::log(&format!(
+                "⚠ CF-артефакт: не удалось создать {}: {}",
+                artifact_dir.display(),
+                e
+            ));
             return false;
         }
 
-        Logger::log(&format!("🔧 Бинарный snapshot конфигурации: {}", artifact_path.display()));
+        Logger::log(&format!(
+            "🔧 Бинарный snapshot конфигурации: {}",
+            artifact_path.display()
+        ));
         let cmd = IbcmdBuilder::save_base(params, &self.config);
         match ProcessRunner::run(&cmd) {
             Ok(r) if r.success => {
-                Logger::log(&format!("✓ CF-артефакт записан: {}", artifact_path.display()));
+                Logger::log(&format!(
+                    "✓ CF-артефакт записан: {}",
+                    artifact_path.display()
+                ));
                 true
             }
             Ok(r) => {
                 let stderr = r.stderr.trim();
                 Logger::log(&format!(
                     "⚠ CF-артефакт: ibcmd вернул код ошибки. stderr: {}",
-                    if stderr.is_empty() { "<пусто>" } else { stderr }
+                    if stderr.is_empty() {
+                        "<пусто>"
+                    } else {
+                        stderr
+                    }
                 ));
                 false
             }
@@ -429,11 +461,17 @@ impl ExportCoordinator {
             .join("_artifacts")
             .join("extensions")
             .join(format!("{}.cfe", ext_name));
-        let artifact_dir = artifact_path.parent().expect("у <name>.cfe всегда есть parent");
+        let artifact_dir = artifact_path
+            .parent()
+            .expect("у <name>.cfe всегда есть parent");
 
         if let Err(e) = std::fs::create_dir_all(artifact_dir) {
-            Logger::log(&format!("⚠ CFE-артефакт {}: не удалось создать {}: {}",
-                ext_name, artifact_dir.display(), e));
+            Logger::log(&format!(
+                "⚠ CFE-артефакт {}: не удалось создать {}: {}",
+                ext_name,
+                artifact_dir.display(),
+                e
+            ));
             return false;
         }
 
@@ -441,17 +479,28 @@ impl ExportCoordinator {
         // (поведение зависит от версии). Удаляем старый bin перед перезаписью.
         if artifact_path.exists() {
             if let Err(e) = std::fs::remove_file(&artifact_path) {
-                Logger::log(&format!("⚠ CFE-артефакт {}: не удалось удалить старый {}: {}",
-                    ext_name, artifact_path.display(), e));
+                Logger::log(&format!(
+                    "⚠ CFE-артефакт {}: не удалось удалить старый {}: {}",
+                    ext_name,
+                    artifact_path.display(),
+                    e
+                ));
                 return false;
             }
         }
 
-        Logger::log(&format!("🔧 Бинарный snapshot расширения {}: {}", ext_name, artifact_path.display()));
+        Logger::log(&format!(
+            "🔧 Бинарный snapshot расширения {}: {}",
+            ext_name,
+            artifact_path.display()
+        ));
         let cmd = IbcmdBuilder::save_extension(params, &self.config, ext_name);
         match ProcessRunner::run(&cmd) {
             Ok(r) if r.success => {
-                Logger::log(&format!("✓ CFE-артефакт записан: {}", artifact_path.display()));
+                Logger::log(&format!(
+                    "✓ CFE-артефакт записан: {}",
+                    artifact_path.display()
+                ));
                 true
             }
             Ok(r) => {
@@ -459,12 +508,19 @@ impl ExportCoordinator {
                 Logger::log(&format!(
                     "⚠ CFE-артефакт {}: ibcmd вернул код ошибки. stderr: {}",
                     ext_name,
-                    if stderr.is_empty() { "<пусто>" } else { stderr }
+                    if stderr.is_empty() {
+                        "<пусто>"
+                    } else {
+                        stderr
+                    }
                 ));
                 false
             }
             Err(e) => {
-                Logger::log(&format!("⚠ CFE-артефакт {}: ошибка запуска ibcmd: {}", ext_name, e));
+                Logger::log(&format!(
+                    "⚠ CFE-артефакт {}: ошибка запуска ibcmd: {}",
+                    ext_name, e
+                ));
                 false
             }
         }
@@ -478,7 +534,11 @@ impl ExportCoordinator {
     ///
     /// `save_artifacts` — дополнительно писать бинарные снимки `_artifacts/extensions/<имя>.cfe`.
     /// Если выключено, каталог `_artifacts/` не создаётся и не чистится вообще.
-    pub fn export_extensions(&self, params: &IbcmdParams, save_artifacts: bool) -> HashMap<String, bool> {
+    pub fn export_extensions(
+        &self,
+        params: &IbcmdParams,
+        save_artifacts: bool,
+    ) -> HashMap<String, bool> {
         let repo = Path::new(&self.config.output_path).to_path_buf();
         let ext_dir = repo.join("extensions");
         // state.db (рядом с exe) — источник прошлых хешей расширений вместо
@@ -487,7 +547,10 @@ impl ExportCoordinator {
         let mut db = match crate::state_db::StateDb::open_default() {
             Ok(d) => Some(d),
             Err(e) => {
-                Logger::log(&format!("⚠ state.db не открылась ({}): инкремент расширений отключён, выгружаю все", e));
+                Logger::log(&format!(
+                    "⚠ state.db не открылась ({}): инкремент расширений отключён, выгружаю все",
+                    e
+                ));
                 None
             }
         };
@@ -533,28 +596,39 @@ impl ExportCoordinator {
             } else {
                 Logger::log(&format!(
                     "Прочитано прошлых хэшей: {} шт. (state.db, repo={})",
-                    last_hashes.len(), self.repo_id
+                    last_hashes.len(),
+                    self.repo_id
                 ));
             }
-            to_export = current.iter()
+            to_export = current
+                .iter()
                 .filter(|(name, hash)| {
                     // Если hash-sum отсутствует в выводе ibcmd — выгружаем принудительно
-                    if hash.is_empty() { return true; }
-                    last_hashes.get(name).map_or(true, |old| old != hash)
+                    if hash.is_empty() {
+                        return true;
+                    }
+                    last_hashes.get(name) != Some(hash)
                 })
                 .map(|(n, _)| n.clone())
                 .collect();
-            to_remove = last_hashes.keys()
+            to_remove = last_hashes
+                .keys()
                 .filter(|name| !current_hashes.contains_key(*name))
                 .cloned()
                 .collect();
 
             Logger::log(&format!(
                 "К выгрузке: {} из {} (новые/изменённые). К удалению: {} (больше нет в ИБ).",
-                to_export.len(), current.len(), to_remove.len()
+                to_export.len(),
+                current.len(),
+                to_remove.len()
             ));
-            for n in &to_export { Logger::log(&format!("  + {}", n)); }
-            for n in &to_remove { Logger::log(&format!("  − {}", n)); }
+            for n in &to_export {
+                Logger::log(&format!("  + {}", n));
+            }
+            for n in &to_remove {
+                Logger::log(&format!("  − {}", n));
+            }
         } else {
             // Полная перезапись
             if ext_dir.exists() {
@@ -590,7 +664,9 @@ impl ExportCoordinator {
             let dir = ext_dir.join(name);
             if dir.exists() {
                 match std::fs::remove_dir_all(&dir) {
-                    Ok(_) => Logger::log(&format!("✓ Удалена папка удалённого расширения: {}", name)),
+                    Ok(_) => {
+                        Logger::log(&format!("✓ Удалена папка удалённого расширения: {}", name))
+                    }
                     Err(e) => Logger::log(&format!("✗ Не удалось удалить папку {}: {}", name, e)),
                 }
             }
@@ -598,8 +674,15 @@ impl ExportCoordinator {
                 let cfe = cfe_artifact_dir.join(format!("{}.cfe", name));
                 if cfe.exists() {
                     match std::fs::remove_file(&cfe) {
-                        Ok(_) => Logger::log(&format!("✓ Удалён CFE-артефакт удалённого расширения: {}", cfe.display())),
-                        Err(e) => Logger::log(&format!("⚠ Не удалось удалить CFE-артефакт {}: {}", cfe.display(), e)),
+                        Ok(_) => Logger::log(&format!(
+                            "✓ Удалён CFE-артефакт удалённого расширения: {}",
+                            cfe.display()
+                        )),
+                        Err(e) => Logger::log(&format!(
+                            "⚠ Не удалось удалить CFE-артефакт {}: {}",
+                            cfe.display(),
+                            e
+                        )),
                     }
                 }
             }
@@ -609,19 +692,32 @@ impl ExportCoordinator {
         let mut results = HashMap::new();
         let total = to_export.len();
         for (i, ext_name) in to_export.iter().enumerate() {
-            Logger::log(&format!("\n[{}/{}] Выгрузка расширения: {}", i + 1, total, ext_name));
+            Logger::log(&format!(
+                "\n[{}/{}] Выгрузка расширения: {}",
+                i + 1,
+                total,
+                ext_name
+            ));
 
             let this_ext_dir = ext_dir.join(ext_name);
             // В инкрементальном режиме папка расширения могла остаться от прошлого запуска — чистим
             if this_ext_dir.exists() {
                 if let Err(e) = std::fs::remove_dir_all(&this_ext_dir) {
-                    Logger::log(&format!("✗ Не удалось очистить папку {}: {}", this_ext_dir.display(), e));
+                    Logger::log(&format!(
+                        "✗ Не удалось очистить папку {}: {}",
+                        this_ext_dir.display(),
+                        e
+                    ));
                     results.insert(ext_name.clone(), false);
                     continue;
                 }
             }
             if let Err(e) = std::fs::create_dir_all(&this_ext_dir) {
-                Logger::log(&format!("✗ Не удалось создать папку {}: {}", this_ext_dir.display(), e));
+                Logger::log(&format!(
+                    "✗ Не удалось создать папку {}: {}",
+                    this_ext_dir.display(),
+                    e
+                ));
                 results.insert(ext_name.clone(), false);
                 continue;
             }
@@ -664,7 +760,8 @@ impl ExportCoordinator {
                 .as_ref()
                 .map(|d| d.load_extension_hashes(&self.repo_id).unwrap_or_default())
                 .unwrap_or_default();
-            current_hashes.iter()
+            current_hashes
+                .iter()
                 .map(|(name, cur)| {
                     let was_ok = results.get(name).copied().unwrap_or(false);
                     if was_ok {
@@ -705,7 +802,10 @@ impl ExportCoordinator {
         if total == 0 {
             Logger::log("ИТОГИ: 0 расширений требовало обновления — всё актуально");
         } else {
-            Logger::log(&format!("ИТОГИ: {}/{} расширений успешно", success_count, total));
+            Logger::log(&format!(
+                "ИТОГИ: {}/{} расширений успешно",
+                success_count, total
+            ));
         }
         results
     }
@@ -719,9 +819,11 @@ impl ExportCoordinator {
                 self.config.extensions.len()
             ));
             return Some(
-                self.config.extensions.iter()
+                self.config
+                    .extensions
+                    .iter()
                     .map(|n| (n.clone(), String::new()))
-                    .collect()
+                    .collect(),
             );
         }
 
@@ -771,7 +873,9 @@ impl ExportCoordinator {
         let mut current_name: Option<String> = None;
         let mut current_hash: Option<String> = None;
 
-        let flush = |result: &mut Vec<(String, String)>, name: &mut Option<String>, hash: &mut Option<String>| {
+        let flush = |result: &mut Vec<(String, String)>,
+                     name: &mut Option<String>,
+                     hash: &mut Option<String>| {
             if let Some(n) = name.take() {
                 result.push((n, hash.take().unwrap_or_default()));
             } else {
@@ -792,7 +896,11 @@ impl ExportCoordinator {
                 None => continue,
             };
             let key = trimmed[..colon_pos].trim().to_lowercase();
-            let value = trimmed[colon_pos + 1..].trim().trim_matches('"').trim().to_string();
+            let value = trimmed[colon_pos + 1..]
+                .trim()
+                .trim_matches('"')
+                .trim()
+                .to_string();
 
             match key.as_str() {
                 "name" | "имя" => {
@@ -825,7 +933,10 @@ impl ExportCoordinator {
         let mut db = match crate::state_db::StateDb::open_default() {
             Ok(d) => d,
             Err(e) => {
-                Logger::log(&format!("предупреждение: миграция state.db пропущена (open: {})", e));
+                Logger::log(&format!(
+                    "предупреждение: миграция state.db пропущена (open: {})",
+                    e
+                ));
                 return;
             }
         };
@@ -836,19 +947,25 @@ impl ExportCoordinator {
             .map(|m| m.is_empty())
             .unwrap_or(true);
         if ext_empty {
-            for rel in ["extensions/.extensions-hashes.json", ".extensions-hashes.json"] {
+            for rel in [
+                "extensions/.extensions-hashes.json",
+                ".extensions-hashes.json",
+            ] {
                 let f = output.join(rel);
                 if f.is_file() {
                     if let Ok(data) = std::fs::read(&f) {
                         if let Ok(map) = serde_json::from_slice::<HashMap<String, String>>(&data) {
                             if !map.is_empty() {
                                 match db.save_extension_hashes(&self.repo_id, &map) {
-                                    Ok(_) => Logger::log(&format!(
+                                    Ok(_) => {
+                                        Logger::log(&format!(
                                         "Миграция: {} хешей расширений из {} -> state.db (repo={})",
                                         map.len(), f.display(), self.repo_id
-                                    )),
+                                    ))
+                                    }
                                     Err(e) => Logger::log(&format!(
-                                        "предупреждение: миграция хешей расширений не удалась: {}", e
+                                        "предупреждение: миграция хешей расширений не удалась: {}",
+                                        e
                                     )),
                                 }
                                 break;
@@ -891,10 +1008,14 @@ impl ExportCoordinator {
                             .collect();
                     let n = items.len();
                     if let Err(e) = db.save_processings(&self.repo_id, &items) {
-                        Logger::log(&format!("предупреждение: миграция допобработок не удалась: {}", e));
+                        Logger::log(&format!(
+                            "предупреждение: миграция допобработок не удалась: {}",
+                            e
+                        ));
                     } else {
                         Logger::log(&format!(
-                            "Миграция: {} записей допобработок из _manifest.json -> state.db", n
+                            "Миграция: {} записей допобработок из _manifest.json -> state.db",
+                            n
                         ));
                     }
                 }
@@ -911,7 +1032,10 @@ impl ExportCoordinator {
                             kind_uuid_to_name: manifest.kind_uuid_to_name,
                         };
                         if let Err(e) = db.save_discovery(&self.repo_id, &disc) {
-                            Logger::log(&format!("предупреждение: миграция discovery-кэша не удалась: {}", e));
+                            Logger::log(&format!(
+                                "предупреждение: миграция discovery-кэша не удалась: {}",
+                                e
+                            ));
                         } else {
                             Logger::log(
                                 "Миграция: discovery-кэш допобработок из _manifest.json -> state.db"
@@ -926,7 +1050,10 @@ impl ExportCoordinator {
     pub fn export_full(&self, opts: &ExportOptions) -> ExportResults {
         Logger::separator();
         Logger::log("НАЧАЛО ВЫГРУЗКИ");
-        Logger::log(&format!("Время: {}", Local::now().format("%Y-%m-%d %H:%M:%S")));
+        Logger::log(&format!(
+            "Время: {}",
+            Local::now().format("%Y-%m-%d %H:%M:%S")
+        ));
         Logger::separator();
 
         let _ = std::fs::create_dir_all(&self.config.output_path);
@@ -948,7 +1075,8 @@ impl ExportCoordinator {
             ));
         }
         if opts.export_extensions {
-            results.extensions = Some(self.export_extensions(&opts.ibcmd_params, opts.save_artifacts));
+            results.extensions =
+                Some(self.export_extensions(&opts.ibcmd_params, opts.save_artifacts));
         }
         if opts.export_processings {
             results.processings = Some(self.export_processings(opts));
@@ -956,10 +1084,20 @@ impl ExportCoordinator {
 
         Logger::separator();
         Logger::log("ВЫГРУЗКА ЗАВЕРШЕНА");
-        Logger::log(&format!("Время: {}", Local::now().format("%Y-%m-%d %H:%M:%S")));
+        Logger::log(&format!(
+            "Время: {}",
+            Local::now().format("%Y-%m-%d %H:%M:%S")
+        ));
 
         if let Some(s) = results.base {
-            Logger::log(&format!("  Основная конфигурация: {}", if s { "✓ Успешно" } else { "✗ Ошибка" }));
+            Logger::log(&format!(
+                "  Основная конфигурация: {}",
+                if s {
+                    "✓ Успешно"
+                } else {
+                    "✗ Ошибка"
+                }
+            ));
         }
         if let Some(ref ext) = results.extensions {
             if ext.contains_key("<list-failed>") {
@@ -1012,16 +1150,17 @@ impl ExportCoordinator {
 
         // Резолв StorageMapping: override из CLI > кэш в манифесте > fatal error
         // (автодискавери через расширение — следующий этап, пока не реализовано).
-        let mapping = match self.resolve_processings_mapping(&output_dir, cli_params, &opts.ibcmd_params) {
-            Ok(m) => m,
-            Err(e) => {
-                Logger::log(&format!("✗ Не удалось получить структуру хранения: {}", e));
-                return ProcessingsResult {
-                    failed: vec![("<mapping>".into(), e.to_string())],
-                    ..Default::default()
-                };
-            }
-        };
+        let mapping =
+            match self.resolve_processings_mapping(&output_dir, cli_params, &opts.ibcmd_params) {
+                Ok(m) => m,
+                Err(e) => {
+                    Logger::log(&format!("✗ Не удалось получить структуру хранения: {}", e));
+                    return ProcessingsResult {
+                        failed: vec![("<mapping>".into(), e.to_string())],
+                        ..Default::default()
+                    };
+                }
+            };
 
         // Карта UUID видов → представление больше не резолвится здесь: её строит
         // напрямую из SQL processings::run_async (build_kind_map, по mapping.enum_table).
@@ -1035,7 +1174,6 @@ impl ExportCoordinator {
             db_user: opts.ibcmd_params.db_user.as_deref(),
             db_pwd: opts.ibcmd_params.db_pwd.as_deref(),
             mapping,
-            kind_uuid_to_name: std::collections::HashMap::new(),
         };
 
         // Первый прогон. Если упало с "Invalid column/object name" —
@@ -1053,7 +1191,7 @@ impl ExportCoordinator {
                 if stale_mapping {
                     Logger::log(
                         "⚠ Imена таблицы/полей устарели (изменение конфигурации БСП?), \
-                         автоматический rediscover и повторный запуск."
+                         автоматический rediscover и повторный запуск.",
                     );
                     let forced_cli = ProcessingsCliParams {
                         sql_server: cli_params.sql_server.clone(),
@@ -1062,7 +1200,11 @@ impl ExportCoordinator {
                         incremental: cli_params.incremental,
                         discovery: cli_params.discovery,
                     };
-                    match self.resolve_processings_mapping(&output_dir, &forced_cli, &opts.ibcmd_params) {
+                    match self.resolve_processings_mapping(
+                        &output_dir,
+                        &forced_cli,
+                        &opts.ibcmd_params,
+                    ) {
                         Ok(new_mapping) => {
                             let retry_params = processings::ProcessingsParams {
                                 sql_server: &cli_params.sql_server,
@@ -1073,7 +1215,6 @@ impl ExportCoordinator {
                                 db_user: opts.ibcmd_params.db_user.as_deref(),
                                 db_pwd: opts.ibcmd_params.db_pwd.as_deref(),
                                 mapping: new_mapping,
-                                kind_uuid_to_name: std::collections::HashMap::new(),
                             };
                             processings::export_processings(&retry_params, &output_dir)
                         }
@@ -1089,8 +1230,12 @@ impl ExportCoordinator {
             Ok(mut result) => {
                 Logger::log(&format!(
                     "✓ .epf: new={}, changed={}, unchanged={}, deleted={}, skipped={}, failed={}",
-                    result.new, result.changed, result.unchanged, result.deleted,
-                    result.skipped_empty.len(), result.failed.len()
+                    result.new,
+                    result.changed,
+                    result.unchanged,
+                    result.deleted,
+                    result.skipped_empty.len(),
+                    result.failed.len()
                 ));
                 if !result.failed.is_empty() {
                     Logger::log("⚠ Записи с ошибками:");
@@ -1115,31 +1260,6 @@ impl ExportCoordinator {
                     failed: vec![("<fatal>".into(), e.to_string())],
                     ..Default::default()
                 }
-            }
-        }
-    }
-
-    /// Чистка корня External/ от побочных файлов Designer.
-    /// Оставляем: _manifest.json и любые подпапки.
-    /// Удаляем: всё остальное (файлы на верхнем уровне).
-    fn cleanup_external_root(external_dir: &Path) {
-        let entries = match std::fs::read_dir(external_dir) {
-            Ok(e) => e,
-            Err(_) => return,
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-            let Some(name) = path.file_name().and_then(|n| n.to_str()) else { continue };
-            if name == "_manifest.json" {
-                continue;
-            }
-            if let Err(e) = std::fs::remove_file(&path) {
-                Logger::log(&format!("⚠ не удалось удалить побочный файл {}: {}", path.display(), e));
-            } else {
-                Logger::log(&format!("  🗑 удалён побочный файл: {}", name));
             }
         }
     }
@@ -1207,7 +1327,8 @@ impl ExportCoordinator {
                         } else {
                             let msg = format!(
                                 "исходник не найден: ни {} ни {} не существуют",
-                                p(&candidate_epf), p(&candidate_erf)
+                                p(&candidate_epf),
+                                p(&candidate_erf)
                             );
                             Logger::log(&format!("⚠ [{}/{}] {}: {}", i + 1, total, name, msg));
                             failed_shared.lock().unwrap().push((name.clone(), msg));
@@ -1217,7 +1338,9 @@ impl ExportCoordinator {
                         let target = src_root.join(name);
 
                         // ЛОГИРУЕМ ДО запуска — чтобы при подвисании было ясно, какой файл крутится.
-                        let size = std::fs::metadata(&initial_path).map(|m| m.len()).unwrap_or(0);
+                        let size = std::fs::metadata(&initial_path)
+                            .map(|m| m.len())
+                            .unwrap_or(0);
                         Logger::log(&format!(
                             "[{}/{}] разбор {}{} ({} байт) → {}",
                             i + 1,
@@ -1269,7 +1392,11 @@ impl ExportCoordinator {
                                     name
                                 ));
                                 if let Err(e) = std::fs::remove_file(&initial_path) {
-                                    Logger::log(&format!("  ⚠ не удалось удалить {}: {}", p(&initial_path), e));
+                                    Logger::log(&format!(
+                                        "  ⚠ не удалось удалить {}: {}",
+                                        p(&initial_path),
+                                        e
+                                    ));
                                 }
                                 continue;
                             }
@@ -1310,12 +1437,15 @@ impl ExportCoordinator {
         // 1) Перенос распакованных обработок: processings_src/<name>/ → <output_dir>/<name>/
         let mut moved_dirs = 0usize;
         let mut moved_files = 0usize;
-        let mut path_renames: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        let mut path_renames: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
         if src_root.is_dir() {
             if let Ok(entries) = std::fs::read_dir(&src_root) {
                 for entry in entries.flatten() {
                     let from = entry.path();
-                    let Some(fname) = from.file_name() else { continue };
+                    let Some(fname) = from.file_name() else {
+                        continue;
+                    };
                     let to = output_dir.join(fname);
                     if to.exists() {
                         let _ = std::fs::remove_dir_all(&to);
@@ -1331,7 +1461,9 @@ impl ExportCoordinator {
                         }
                         Err(e) => Logger::log(&format!(
                             "⚠ не удалось перенести {} → {}: {}",
-                            p(&from), p(&to), e
+                            p(&from),
+                            p(&to),
+                            e
                         )),
                     }
                 }
@@ -1346,8 +1478,12 @@ impl ExportCoordinator {
             if let Ok(entries) = std::fs::read_dir(&processings_dir) {
                 for entry in entries.flatten() {
                     let from = entry.path();
-                    if !from.is_file() { continue; }
-                    let Some(fname) = from.file_name() else { continue };
+                    if !from.is_file() {
+                        continue;
+                    }
+                    let Some(fname) = from.file_name() else {
+                        continue;
+                    };
                     let to = output_dir.join(fname);
                     if to.exists() {
                         let _ = std::fs::remove_file(&to);
@@ -1360,7 +1496,9 @@ impl ExportCoordinator {
                         }
                         Err(e) => Logger::log(&format!(
                             "⚠ не удалось перенести {} → {}: {}",
-                            p(&from), p(&to), e
+                            p(&from),
+                            p(&to),
+                            e
                         )),
                     }
                 }
@@ -1409,7 +1547,7 @@ impl ExportCoordinator {
     /// Приоритет: CLI override > кэш в _manifest.json > (в будущем) автодискавери через расширение.
     fn resolve_processings_mapping(
         &self,
-        output_dir: &Path,
+        _output_dir: &Path,
         cli: &ProcessingsCliParams,
         ibcmd: &IbcmdParams,
     ) -> Result<StorageMapping, crate::error::ExportError> {
@@ -1475,7 +1613,11 @@ impl ExportCoordinator {
                             "Запрошен --discovery=mcp, но HTTP-сервис не задан \
                              (mcpUrl='{}', mcpApiKey={}).",
                             self.config.mcp_url,
-                            if self.config.mcp_api_key.is_empty() { "<пусто>" } else { "<задан>" }
+                            if self.config.mcp_api_key.is_empty() {
+                                "<пусто>"
+                            } else {
+                                "<задан>"
+                            }
                         ),
                     });
                 }
@@ -1547,10 +1689,16 @@ impl ExportCoordinator {
             disc.field_kind = mapping.field_kind.clone();
             disc.enum_table = mapping.enum_table.clone();
             disc.hash_is_binary = mapping.hash_is_binary;
-            disc.discovered_at =
-                Some(chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%z").to_string());
+            disc.discovered_at = Some(
+                chrono::Local::now()
+                    .format("%Y-%m-%dT%H:%M:%S%z")
+                    .to_string(),
+            );
             if let Err(e) = db.save_discovery(&self.repo_id, &disc) {
-                Logger::log(&format!("⚠ не удалось сохранить discovery в state.db: {}", e));
+                Logger::log(&format!(
+                    "⚠ не удалось сохранить discovery в state.db: {}",
+                    e
+                ));
             }
         }
 
@@ -1571,11 +1719,7 @@ impl ExportCoordinator {
         cli: &ProcessingsCliParams,
         ibcmd: &IbcmdParams,
     ) -> Result<processings::StorageMapping, crate::error::ExportError> {
-        let meta_name = if self.config.processings_meta_name.trim().is_empty() {
-            "Справочник.ДополнительныеОтчетыИОбработки"
-        } else {
-            self.config.processings_meta_name.as_str()
-        };
+        let meta_name = self.config.processings_meta_name();
 
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -1604,11 +1748,7 @@ impl ExportCoordinator {
         use crate::mcp_client::McpClient;
         use crate::storage_mapping::{fetch_enum_table, fetch_storage_mapping};
 
-        let meta_name = if self.config.processings_meta_name.trim().is_empty() {
-            "Справочник.ДополнительныеОтчетыИОбработки"
-        } else {
-            self.config.processings_meta_name.as_str()
-        };
+        let meta_name = self.config.processings_meta_name();
 
         let client = McpClient::new(
             &self.config.mcp_url,
@@ -1676,7 +1816,8 @@ pub fn force_remove_processings_cache(output_dir: &Path) {
             )),
             Err(e) => Logger::log(&format!(
                 "⚠ не удалось удалить {}: {}",
-                processings.display(), e
+                processings.display(),
+                e
             )),
         }
     }
@@ -1691,7 +1832,12 @@ mod tests {
         for config_changed in [None, Some(true), Some(false)] {
             for full_rewrite in [false, true] {
                 for cf_exists in [false, true] {
-                    assert!(!need_base_artifact(false, config_changed, full_rewrite, cf_exists));
+                    assert!(!need_base_artifact(
+                        false,
+                        config_changed,
+                        full_rewrite,
+                        cf_exists
+                    ));
                 }
             }
         }

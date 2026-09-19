@@ -186,10 +186,7 @@ fn unpack_to_readable_with_depth(
                     Ok(sub) => report.merge(&sub),
                     Err(e) => {
                         // Не падаем, просто кладём raw + лог в _meta.
-                        std::fs::write(
-                            nested_dir.join(format!("{}.v8", entry.name)),
-                            &inflated,
-                        )?;
+                        std::fs::write(nested_dir.join(format!("{}.v8", entry.name)), &inflated)?;
                         std::fs::write(
                             nested_dir.join(format!("{}.error.txt", entry.name)),
                             format!("nested unpack failed: {e}").as_bytes(),
@@ -321,7 +318,11 @@ mod tests {
             content.contains("<SchemaFile") || content.contains("<DataCompositionSchema"),
             "ожидался корневой тег <SchemaFile> или <DataCompositionSchema> в DCS-XML"
         );
-        assert!(content.len() > 1000, "DCS XML слишком короткий ({})", content.len());
+        assert!(
+            content.len() > 1000,
+            "DCS XML слишком короткий ({})",
+            content.len()
+        );
         eprintln!(
             "DCS XML: {} bytes, head: {}",
             content.len(),
@@ -342,7 +343,8 @@ mod tests {
     #[test]
     #[ignore]
     fn unpack_redaktirovanie_hbk_smoke() {
-        let path = std::path::Path::new(r"C:\Projects\ОбработкаВыгрузкиHBK\РедактированиеHBK_WebKit.epf");
+        let path =
+            std::path::Path::new(r"C:\Projects\ОбработкаВыгрузкиHBK\РедактированиеHBK_WebKit.epf");
         if !path.exists() {
             eprintln!("фикстура не найдена: {}", path.display());
             return;
@@ -429,7 +431,10 @@ mod tests {
         );
         eprintln!("Итого по типам: {grand:?}");
 
-        assert_eq!(total_failed, 0, "{total_failed} из {total_files} файлов упали");
+        assert_eq!(
+            total_failed, 0,
+            "{total_failed} из {total_files} файлов упали"
+        );
         // Проверка что Phase 3 расширение работает: на 60+ обработках должно
         // извлекаться много BSL-модулей и DCS XML.
         if total_files >= 10 {

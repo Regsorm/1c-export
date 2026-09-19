@@ -69,9 +69,11 @@ enum Commands {
 /// CLI для выгрузки конфигурации 1С через IBCMD
 #[derive(Parser, Debug)]
 #[command(name = "1c-export")]
-#[command(version = "3.0.0")]
+#[command(version)]
 #[command(about = "Выгрузка конфигурации 1С через IBCMD (многопоточно, c поддержкой --sync)")]
-#[command(after_help = "Примеры:\n  1c-export --config config/config.json --export-base --export-extensions\n  1c-export --config config/config.json --export-base --ibcmd-db-auth-windows --ibcmd-sync\n  1c-export --server sql-server --database demo-ut --auth-type password --login export_user --password <пароль> --export-base --ibcmd-db-auth-windows --ibcmd-sync --ibcmd-jobs 8 --output-path C:\\Repos\\demo-ut\n  1c-export watch --bases C:\\1c-export-daemon\\bases.json")]
+#[command(
+    after_help = "Примеры:\n  1c-export --config config/config.json --export-base --export-extensions\n  1c-export --config config/config.json --export-base --ibcmd-db-auth-windows --ibcmd-sync\n  1c-export --server sql-server --database demo-ut --auth-type password --login export_user --password <пароль> --export-base --ibcmd-db-auth-windows --ibcmd-sync --ibcmd-jobs 8 --output-path C:\\Repos\\demo-ut\n  1c-export watch --bases C:\\1c-export-daemon\\bases.json"
+)]
 struct Cli {
     /// Подкоманда. Если не указана — выполняется разовая выгрузка по флагам.
     #[command(subcommand)]
@@ -312,7 +314,11 @@ fn run_subcommand(cmd: Commands) {
             let bases_dir = bases_path.parent().unwrap_or(Path::new("."));
             fn resolve(base: &Path, raw: &str) -> String {
                 let p = std::path::PathBuf::from(raw);
-                if p.is_absolute() { raw.to_string() } else { base.join(p).to_string_lossy().into_owned() }
+                if p.is_absolute() {
+                    raw.to_string()
+                } else {
+                    base.join(p).to_string_lossy().into_owned()
+                }
             }
             cfg.state_dir = resolve(bases_dir, &cfg.state_dir);
             cfg.log_dir = resolve(bases_dir, &cfg.log_dir);
@@ -348,9 +354,7 @@ fn run_subcommand(cmd: Commands) {
 fn run_cli(cli: Cli) {
     if !(cli.export_base || cli.export_extensions || cli.export_processings) {
         eprintln!("ОШИБКА: Не выбрано ни одного действия для выгрузки");
-        eprintln!(
-            "Используйте --export-base и/или --export-extensions и/или --export-processings"
-        );
+        eprintln!("Используйте --export-base и/или --export-extensions и/или --export-processings");
         eprintln!("Для справки: --help");
         process::exit(1);
     }
@@ -369,19 +373,33 @@ fn run_cli(cli: Cli) {
     Logger::set_level(logging::LogLevel::parse(&app_config.log_level));
 
     // CLI -> config
-    if let Some(ref server) = cli.server { app_config.server = server.clone(); }
-    if let Some(ref s1c) = cli.server_1c { app_config.server_1c = s1c.clone(); }
-    if let Some(ref database) = cli.database { app_config.database = database.clone(); }
+    if let Some(ref server) = cli.server {
+        app_config.server = server.clone();
+    }
+    if let Some(ref s1c) = cli.server_1c {
+        app_config.server_1c = s1c.clone();
+    }
+    if let Some(ref database) = cli.database {
+        app_config.database = database.clone();
+    }
     if let Some(ref auth_type) = cli.auth_type {
         app_config.authentication.auth_type = match auth_type {
             AuthTypeArg::Os => config::AuthType::Os,
             AuthTypeArg::Password => config::AuthType::Password,
         };
     }
-    if let Some(ref login) = cli.login { app_config.authentication.login = login.clone(); }
-    if let Some(ref password) = cli.password { app_config.authentication.password = password.clone(); }
-    if let Some(ref ibcmd_path) = cli.ibcmd_path { app_config.ibcmd_path = ibcmd_path.clone(); }
-    if let Some(ref output_path) = cli.output_path { app_config.output_path = output_path.clone(); }
+    if let Some(ref login) = cli.login {
+        app_config.authentication.login = login.clone();
+    }
+    if let Some(ref password) = cli.password {
+        app_config.authentication.password = password.clone();
+    }
+    if let Some(ref ibcmd_path) = cli.ibcmd_path {
+        app_config.ibcmd_path = ibcmd_path.clone();
+    }
+    if let Some(ref output_path) = cli.output_path {
+        app_config.output_path = output_path.clone();
+    }
 
     if let Err(errors) = app_config.validate() {
         eprintln!("ОШИБКА: Неверная конфигурация:");
@@ -396,11 +414,20 @@ fn run_cli(cli: Cli) {
         println!("КОНФИГУРАЦИЯ ВЫГРУЗКИ");
         println!("{}", "=".repeat(60));
         println!("Сервер MSSQL:   {}", app_config.server);
-        println!("Сервер 1С:      {}{}",
+        println!(
+            "Сервер 1С:      {}{}",
             app_config.server_for_1c(),
-            if app_config.server_1c.is_empty() { " (= MSSQL, явно не задан)" } else { "" });
+            if app_config.server_1c.is_empty() {
+                " (= MSSQL, явно не задан)"
+            } else {
+                ""
+            }
+        );
         println!("База данных:    {}", app_config.database);
-        println!("Аутентификация 1С: {:?}", app_config.authentication.auth_type);
+        println!(
+            "Аутентификация 1С: {:?}",
+            app_config.authentication.auth_type
+        );
         println!("ibcmd.exe:      {}", app_config.ibcmd_path);
         println!("Выгрузка в:     {}", app_config.output_path);
         println!("Инкрементально: {}", cli.ibcmd_sync);
@@ -439,8 +466,7 @@ fn run_cli(cli: Cli) {
     // Параметры выгрузки допобработок (только если выбран режим --export-processings).
     let processings_params = if cli.export_processings {
         // Валидация SQL-кредов — без них SQL-коннект заведомо не поднимется.
-        if !cli.ibcmd_db_auth_windows
-            && (cli.ibcmd_db_user.is_none() || cli.ibcmd_db_pwd.is_none())
+        if !cli.ibcmd_db_auth_windows && (cli.ibcmd_db_user.is_none() || cli.ibcmd_db_pwd.is_none())
         {
             eprintln!(
                 "ОШИБКА: --export-processings требует либо --ibcmd-db-auth-windows, \
@@ -531,10 +557,7 @@ fn run_cli(cli: Cli) {
         Logger::log("✓ Выгрузка завершена успешно");
         // git push — только при успешной выгрузке.
         if cli.git_push {
-            let repo_path = cli
-                .git_repo
-                .as_deref()
-                .unwrap_or(&output_path_for_git);
+            let repo_path = cli.git_repo.as_deref().unwrap_or(&output_path_for_git);
             let auth = match cli.git_auth_type {
                 GitAuthArg::Domain => git_push::GitAuth::Domain,
                 GitAuthArg::Password => git_push::GitAuth::UserPassword {

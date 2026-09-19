@@ -12,11 +12,11 @@
 //! `MetaDataObject/__init__.py`, `json_container_decoder.py`. Реализация
 //! полностью своя.
 
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use crate::v8container::error::Result;
 use crate::v8container::inflate::try_inflate;
 use crate::v8container::reader::{unpack, V8File};
 use crate::v8container::serlist::{parse_bytes_utf8_or_1251, V8Value};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use std::path::Path;
 
 /// UUID типа метаданных «Внешняя обработка» (ExternalDataProcessor) в
@@ -188,6 +188,7 @@ fn check_count_element(counters: &[(usize, i64)], list: &[V8Value]) -> Option<i6
 
 /// Узел индекса реквизитов формы (saby `create_prop_index_by_id`): имя реквизита
 /// + карта дочерних реквизитов (`id → PropNode`). Нужен для разрешения
+///
 /// многоуровневого «ПутьКДанным» (`Родитель.Ребёнок`). saby индексирует ровно
 /// один уровень детей (`decode_child` не рекурсивна), поэтому у детей `child`
 /// всегда пуст — путь глубже 2 уровней у saby тоже обрывается в `None`.
@@ -248,7 +249,7 @@ fn resolve_command(
     commands_index: &std::collections::HashMap<String, String>,
 ) -> Option<String> {
     let cmd_link = list.get(cmd_offset).and_then(|v| v.as_list())?;
-    let cid = cmd_link.get(0).map(text_of)?;
+    let cid = cmd_link.first().map(text_of)?;
     let non_zero = cid.parse::<i64>().map(|n| n != 0).unwrap_or(false);
     if !non_zero {
         return None;
@@ -321,7 +322,14 @@ fn decode_form_elements(
                 )))
             }
         };
-        match decode_one_element(&uuid, &mut elem_val, path, props_index, commands_index, data)? {
+        match decode_one_element(
+            &uuid,
+            &mut elem_val,
+            path,
+            props_index,
+            commands_index,
+            data,
+        )? {
             ElemOne::Node(node) => tree.push(node),
             ElemOne::Fallback(r) => return Ok(ElemResult::Fallback(r)),
         }
@@ -391,9 +399,8 @@ fn decode_one_element(
             ),
             FORM_ITEM_GROUP_UUID => {
                 // saby Group.decode: guard raw[0]=='22' и остаток < 20.
-                if list.get(0).map(text_of).as_deref() == Some("22")
-                    && check_count_element(&[(3, 1), (1, 1), (17, 2)], list)
-                        .map_or(true, |s| s < 20)
+                if list.first().map(text_of).as_deref() == Some("22")
+                    && check_count_element(&[(3, 1), (1, 1), (17, 2)], list).is_none_or(|s| s < 20)
                 {
                     return Ok(ElemOne::Fallback(format!(
                         "форма: группа требует спец-разбора (path=\"{path}\")"
@@ -417,9 +424,8 @@ fn decode_one_element(
             }
             FORM_ITEM_TABLE_UUID => {
                 // saby Table.decode: guard raw[0]=='55' и остаток != 99.
-                if list.get(0).map(text_of).as_deref() == Some("55")
-                    && check_count_element(&[(4, 1), (50, 2), (7, 2)], list)
-                        .map_or(true, |s| s != 99)
+                if list.first().map(text_of).as_deref() == Some("55")
+                    && (check_count_element(&[(4, 1), (50, 2), (7, 2)], list) != Some(99))
                 {
                     return Ok(ElemOne::Fallback(format!(
                         "форма: таблица требует спец-разбора (path=\"{path}\")"
@@ -518,8 +524,14 @@ fn decode_one_element(
                 )))
             }
         };
-        match decode_form_elements(gitems, child_index, &new_path, props_index, commands_index, data)?
-        {
+        match decode_form_elements(
+            gitems,
+            child_index,
+            &new_path,
+            props_index,
+            commands_index,
+            data,
+        )? {
             ElemResult::Tree(t) => child_tree = t,
             ElemResult::Fallback(r) => return Ok(ElemOne::Fallback(r)),
         }
@@ -697,7 +709,10 @@ fn peek_form_kind(content: &V8File, form_uuid: &str) -> Result<String> {
         _ => return Ok("0".to_string()),
     };
     let type_path: Vec<usize> = base.iter().copied().chain([1, 3]).collect();
-    Ok(fh.path(&type_path).map(text_of).unwrap_or_else(|| "0".to_string()))
+    Ok(fh
+        .path(&type_path)
+        .map(text_of)
+        .unwrap_or_else(|| "0".to_string()))
 }
 
 // ─── публичный API ──────────────────────────────────────────────────────────
@@ -741,7 +756,10 @@ pub fn unpack_epf_skeleton(epf_bytes: &[u8], dest_dir: &Path) -> Result<UnpackOu
     // Ш2: прочитать «скобкофайлы». Каждый entry внутри контейнера может быть
     // сжат raw DEFLATE без явного маркера — разворачиваем перед парсингом
     // (try_inflate возвращает данные как есть, если это не valid DEFLATE).
-    let root_entry = req!(content.find("root"), "нет entry \"root\" в content-контейнере");
+    let root_entry = req!(
+        content.find("root"),
+        "нет entry \"root\" в content-контейнере"
+    );
     let root_val = parse_bytes_utf8_or_1251(&try_inflate(&root_entry.data))?;
     let file_uuid = text_of(req!(root_val.get(1), "root: нет [1] (file_uuid)"));
 
@@ -861,10 +879,7 @@ pub fn unpack_epf_skeleton(epf_bytes: &[u8], dest_dir: &Path) -> Result<UnpackOu
     let mut form_uuids: Vec<String> = Vec::new();
     let mut report_form_uuids: Vec<String> = Vec::new();
     for i in 0..count_types {
-        let meta = req!(
-            inc.get(i + 3),
-            format!("header includes: нет meta[{i}]")
-        );
+        let meta = req!(inc.get(i + 3), format!("header includes: нет meta[{i}]"));
         let type_uuid = text_of(req!(
             meta.get(0),
             format!("header includes meta[{i}]: нет type_uuid")
@@ -963,62 +978,62 @@ pub fn unpack_epf_skeleton(epf_bytes: &[u8], dest_dir: &Path) -> Result<UnpackOu
     // пустым модулем такого контейнера нет — тогда saby не пишет
     // `code_info_obj`/`code_encoding_obj` в JSON и не создаёт `.obj.bsl`.
     // `code_module` = Some((info_val, code_encoding_obj, code_obj)) при наличии.
-    let code_module: Option<(V8Value, &str, String)> =
-        match content.find(&format!("{uuid}.0")) {
-            None => None,
-            Some(code_entry) => {
-                let code_v8 = match unpack(&try_inflate(&code_entry.data)) {
-                    Ok(v) => v,
-                    Err(_) => {
-                        return Ok(UnpackOutcome::Unsupported(format!(
-                            "{uuid}.0 не является вложенным контейнером — не dir-скелет"
-                        )))
-                    }
-                };
-                let info_entry = req!(
-                    code_v8.find("info"),
-                    format!("{uuid}.0: нет entry \"info\"")
-                );
-                let info_val = V8Value::List(vec![parse_bytes_utf8_or_1251(&try_inflate(
-                    &info_entry.data,
-                ))?]);
+    let code_module: Option<(V8Value, &str, String)> = match content.find(&format!("{uuid}.0")) {
+        None => None,
+        Some(code_entry) => {
+            let code_v8 = match unpack(&try_inflate(&code_entry.data)) {
+                Ok(v) => v,
+                Err(_) => {
+                    return Ok(UnpackOutcome::Unsupported(format!(
+                        "{uuid}.0 не является вложенным контейнером — не dir-скелет"
+                    )))
+                }
+            };
+            let info_entry = req!(
+                code_v8.find("info"),
+                format!("{uuid}.0: нет entry \"info\"")
+            );
+            let info_val = V8Value::List(vec![parse_bytes_utf8_or_1251(&try_inflate(
+                &info_entry.data,
+            ))?]);
 
-                let text_entry = req!(
-                    code_v8.find("text"),
-                    format!("{uuid}.0: нет entry \"text\"")
-                );
-                let text_data = try_inflate(&text_entry.data);
-                let (code_encoding_obj, text_bytes_no_bom): (&str, &[u8]) =
-                    if text_data.starts_with(&[0xEF, 0xBB, 0xBF]) {
-                        ("utf-8-sig", &text_data[3..])
-                    } else {
-                        ("utf-8", &text_data[..])
-                    };
-                let code_text_raw = match std::str::from_utf8(text_bytes_no_bom) {
-                    Ok(s) => s.to_string(),
-                    Err(_) => {
-                        return Ok(UnpackOutcome::Unsupported(format!(
-                            "{uuid}.0/text: не валидный UTF-8"
-                        )))
-                    }
+            let text_entry = req!(
+                code_v8.find("text"),
+                format!("{uuid}.0: нет entry \"text\"")
+            );
+            let text_data = try_inflate(&text_entry.data);
+            let (code_encoding_obj, text_bytes_no_bom): (&str, &[u8]) =
+                if text_data.starts_with(&[0xEF, 0xBB, 0xBF]) {
+                    ("utf-8-sig", &text_data[3..])
+                } else {
+                    ("utf-8", &text_data[..])
                 };
-                Some((info_val, code_encoding_obj, normalize_newlines(&code_text_raw)))
-            }
-        };
+            let code_text_raw = match std::str::from_utf8(text_bytes_no_bom) {
+                Ok(s) => s.to_string(),
+                Err(_) => {
+                    return Ok(UnpackOutcome::Unsupported(format!(
+                        "{uuid}.0/text: не валидный UTF-8"
+                    )))
+                }
+            };
+            Some((
+                info_val,
+                code_encoding_obj,
+                normalize_newlines(&code_text_raw),
+            ))
+        }
+    };
 
     // Ш7: form1 — необязательный.
     let form1: Option<V8Value> = match content.find(&format!("{uuid}.1")) {
-        Some(e) => Some(V8Value::List(vec![parse_bytes_utf8_or_1251(&try_inflate(
-            &e.data,
-        ))?])),
+        Some(e) => Some(V8Value::List(vec![parse_bytes_utf8_or_1251(
+            &try_inflate(&e.data),
+        )?])),
         None => None,
     };
 
     // ─── сборка ExternalDataProcessor.json (порядок ключей фиксирован) ─────
-    let name2_json: Vec<(String, J)> = name2
-        .into_iter()
-        .map(|(k, v)| (k, J::Str(v)))
-        .collect();
+    let name2_json: Vec<(String, J)> = name2.into_iter().map(|(k, v)| (k, J::Str(v))).collect();
 
     let mut root_entries: Vec<(String, J)> = vec![
         ("root".to_string(), J::Bool(true)),
@@ -1062,7 +1077,10 @@ pub fn unpack_epf_skeleton(epf_bytes: &[u8], dest_dir: &Path) -> Result<UnpackOu
     if let Some((_, _, code_obj)) = &code_module {
         if !code_obj.is_empty() {
             let bsl_text = strip_include_areas(code_obj).replace('\n', "\r\n");
-            std::fs::write(dest_dir.join("ExternalDataProcessor.obj.bsl"), bsl_text.as_bytes())?;
+            std::fs::write(
+                dest_dir.join("ExternalDataProcessor.obj.bsl"),
+                bsl_text.as_bytes(),
+            )?;
         }
     }
 
@@ -1079,7 +1097,13 @@ pub fn unpack_epf_skeleton(epf_bytes: &[u8], dest_dir: &Path) -> Result<UnpackOu
     // peek_form_kind дёшево, до полного разбора (см. его докстринг).
     for form_uuid in &form_uuids {
         let outcome = if peek_form_kind(&content, form_uuid)? == "1" {
-            decode_form(&content, form_uuid, &parent_container_uuid, "Form", dest_dir)?
+            decode_form(
+                &content,
+                form_uuid,
+                &parent_container_uuid,
+                "Form",
+                dest_dir,
+            )?
         } else {
             decode_regular_form(&content, form_uuid, "Form", dest_dir)?
         };
@@ -1093,7 +1117,13 @@ pub fn unpack_epf_skeleton(epf_bytes: &[u8], dest_dir: &Path) -> Result<UnpackOu
     // dest_dir/ReportForm/{имя формы}/. Та же дихотомия Тип формы, что и у Form выше.
     for rf_uuid in &report_form_uuids {
         let outcome = if peek_form_kind(&content, rf_uuid)? == "1" {
-            decode_form(&content, rf_uuid, &parent_container_uuid, "ReportForm", dest_dir)?
+            decode_form(
+                &content,
+                rf_uuid,
+                &parent_container_uuid,
+                "ReportForm",
+                dest_dir,
+            )?
         } else {
             decode_regular_form(&content, rf_uuid, "ReportForm", dest_dir)?
         };
@@ -1190,8 +1220,14 @@ fn decode_template(content: &V8File, tmpl_uuid: &str, dest_dir: &Path) -> Result
         .unwrap_or(0);
     let mut name2: Vec<(String, String)> = Vec::with_capacity(name2_count);
     for i in 0..name2_count {
-        let key = text_of(req!(n2.get(1 + 2 * i), format!("макет name2[{i}]: нет key")));
-        let val = text_of(req!(n2.get(2 + 2 * i), format!("макет name2[{i}]: нет val")));
+        let key = text_of(req!(
+            n2.get(1 + 2 * i),
+            format!("макет name2[{i}]: нет key")
+        ));
+        let val = text_of(req!(
+            n2.get(2 + 2 * i),
+            format!("макет name2[{i}]: нет val")
+        ));
         name2.push((key, val));
     }
 
@@ -1223,7 +1259,9 @@ fn decode_template(content: &V8File, tmpl_uuid: &str, dest_dir: &Path) -> Result
     let data_bin: Option<Vec<u8>> = if is_text || is_html {
         None
     } else {
-        content.find(&format!("{tmpl_uuid}.0")).map(|e| try_inflate(&e.data))
+        content
+            .find(&format!("{tmpl_uuid}.0"))
+            .map(|e| try_inflate(&e.data))
     };
     let data_text: Option<Vec<u8>> = if is_text {
         match content.find(&format!("{tmpl_uuid}.0")) {
@@ -1408,7 +1446,9 @@ fn decode_form(
         content.find(form_uuid),
         format!("нет дескриптора формы \"{form_uuid}\"")
     );
-    let mut fh = V8Value::List(vec![parse_bytes_utf8_or_1251(&try_inflate(&fh_entry.data))?]);
+    let mut fh = V8Value::List(vec![parse_bytes_utf8_or_1251(&try_inflate(
+        &fh_entry.data,
+    ))?]);
 
     if text_of(req!(fh.path(&[0, 1, 0]), "форма: нет пути [0,1,0]")) != "1" {
         return Ok(UnpackOutcome::Unsupported(
@@ -1454,8 +1494,14 @@ fn decode_form(
         .unwrap_or(0);
     let mut name2: Vec<(String, String)> = Vec::with_capacity(name2_count);
     for i in 0..name2_count {
-        let key = text_of(req!(n2.get(1 + 2 * i), format!("форма name2[{i}]: нет key")));
-        let val = text_of(req!(n2.get(2 + 2 * i), format!("форма name2[{i}]: нет val")));
+        let key = text_of(req!(
+            n2.get(1 + 2 * i),
+            format!("форма name2[{i}]: нет key")
+        ));
+        let val = text_of(req!(
+            n2.get(2 + 2 * i),
+            format!("форма name2[{i}]: нет val")
+        ));
         name2.push((key, val));
     }
 
@@ -1480,7 +1526,9 @@ fn decode_form(
         content.find(&format!("{form_uuid}.0")),
         format!("нет содержимого формы \"{form_uuid}.0\"")
     );
-    let mut fc = V8Value::List(vec![parse_bytes_utf8_or_1251(&try_inflate(&fc_entry.data))?]);
+    let mut fc = V8Value::List(vec![parse_bytes_utf8_or_1251(&try_inflate(
+        &fc_entry.data,
+    ))?]);
 
     // Код — строковый литерал внутри C[2]; парсер уже вернул чистый текст
     // (внешние кавычки сняты, `""` раскрыты — см. `serlist::Parser::parse_string`).
@@ -1853,10 +1901,22 @@ fn decode_form(
 
     let target = dest_dir.join(class_name).join(&name);
     std::fs::create_dir_all(&target)?;
-    std::fs::write(target.join(format!("{class_name}.json")), form_json_text.as_bytes())?;
-    std::fs::write(target.join(format!("{class_name}.elem.json")), elem_json_text.as_bytes())?;
-    std::fs::write(target.join(format!("{class_name}.id.json")), id_json_text.as_bytes())?;
-    std::fs::write(target.join(format!("{class_name}.obj.bsl")), bsl_text.as_bytes())?;
+    std::fs::write(
+        target.join(format!("{class_name}.json")),
+        form_json_text.as_bytes(),
+    )?;
+    std::fs::write(
+        target.join(format!("{class_name}.elem.json")),
+        elem_json_text.as_bytes(),
+    )?;
+    std::fs::write(
+        target.join(format!("{class_name}.id.json")),
+        id_json_text.as_bytes(),
+    )?;
+    std::fs::write(
+        target.join(format!("{class_name}.obj.bsl")),
+        bsl_text.as_bytes(),
+    )?;
 
     Ok(UnpackOutcome::Done)
 }
@@ -1967,6 +2027,8 @@ struct RfCtx<'a> {
     props_by_elem_id: &'a std::collections::HashMap<String, String>,
 }
 
+type RfDecodedProps = (Option<Vec<J>>, std::collections::HashMap<String, String>);
+
 /// saby `FormProps.decode_list` (FormElements26/27): разобрать реквизиты формы. `container` —
 /// `raw_data[2][2]` формы (список `[count, prop0, prop1, ...]`). `name_index` — смещение имени
 /// в `raw` реквизита (4 для FormElements27, 3 для FormElements26). Возвращает JSON-список
@@ -1976,10 +2038,14 @@ struct RfCtx<'a> {
 fn rf_decode_props(
     container: &mut Vec<V8Value>,
     name_index: usize,
-) -> Result<RfResult<(Option<Vec<J>>, std::collections::HashMap<String, String>)>> {
+) -> Result<RfResult<RfDecodedProps>> {
     let count = match int_at(container.as_slice(), 0) {
         Some(n) if n >= 0 => n as usize,
-        _ => return Ok(RfResult::Fallback("форма: счётчик реквизитов не число".to_string())),
+        _ => {
+            return Ok(RfResult::Fallback(
+                "форма: счётчик реквизитов не число".to_string(),
+            ))
+        }
     };
     if count == 0 {
         return Ok(RfResult::Value((None, std::collections::HashMap::new())));
@@ -1993,7 +2059,10 @@ fn rf_decode_props(
     let mut by_id: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     for i in 0..count {
         let raw_node = &container[1 + i];
-        let list = rf_req!(raw_node.as_list(), format!("форма: реквизит[{i}] не список"));
+        let list = rf_req!(
+            raw_node.as_list(),
+            format!("форма: реквизит[{i}] не список")
+        );
         let name = rf_req!(
             list.get(name_index).map(text_of),
             format!("форма: реквизит[{i}] нет имени по смещению {name_index}")
@@ -2095,7 +2164,11 @@ fn rf_decode_pages(
         );
         let page_count = match int_at(pages_raw_list.as_slice(), 1) {
             Some(n) if n >= 0 => n as usize,
-            _ => return Ok(RfResult::Fallback("форма: счётчик страниц не число".to_string())),
+            _ => {
+                return Ok(RfResult::Fallback(
+                    "форма: счётчик страниц не число".to_string(),
+                ))
+            }
         };
         if pages_raw_list.len() < 2 + page_count {
             return Ok(RfResult::Fallback(
@@ -2104,7 +2177,10 @@ fn rf_decode_pages(
         }
         for i in 0..page_count {
             let raw_page = &pages_raw_list[2 + i];
-            let raw_page_list = rf_req!(raw_page.as_list(), format!("форма: страница[{i}] не список"));
+            let raw_page_list = rf_req!(
+                raw_page.as_list(),
+                format!("форма: страница[{i}] не список")
+            );
             let page_format_version = rf_req!(
                 raw_page_list.first().map(text_of),
                 format!("форма: страница[{i}] нет версии формата")
@@ -2118,7 +2194,10 @@ fn rf_decode_pages(
                 elem_id,
                 J::Obj(vec![
                     ("ver".to_string(), J::Num(ver)),
-                    ("page_format_version".to_string(), J::Str(page_format_version)),
+                    (
+                        "page_format_version".to_string(),
+                        J::Str(page_format_version),
+                    ),
                     ("raw".to_string(), saby_json(raw_page)),
                 ]),
             ));
@@ -2136,7 +2215,11 @@ fn rf_decode_pages(
     let pages_info_offset = pages_offset + 4;
     let pages_info_count = match int_at(pages_parent.as_slice(), pages_info_offset) {
         Some(n) if n >= 0 => n as usize,
-        _ => return Ok(RfResult::Fallback("форма: счётчик page_info не число".to_string())),
+        _ => {
+            return Ok(RfResult::Fallback(
+                "форма: счётчик page_info не число".to_string(),
+            ))
+        }
     };
     let extra: i64 = pages_info_count as i64 - (page_count as i64) * 4;
     for (i, page_name) in page_names.iter().enumerate() {
@@ -2156,7 +2239,10 @@ fn rf_decode_pages(
                 "форма: контейнер page_info короче ожидаемого".to_string(),
             ));
         }
-        let page_info: Vec<J> = pages_parent[offset..offset + take].iter().map(saby_json).collect();
+        let page_info: Vec<J> = pages_parent[offset..offset + take]
+            .iter()
+            .map(saby_json)
+            .collect();
         let key = calc_id(path, Some(page_name), None);
         if let Some((_, J::Obj(entries))) = data.iter_mut().find(|(k, _)| k == &key) {
             entries.push(("info".to_string(), J::Arr(page_info)));
@@ -2188,7 +2274,11 @@ fn rf_resolve_page(page_raw: &str, pages: &[String]) -> Option<Option<String>> {
     if idx.to_string() != page_raw {
         return None;
     }
-    let real_idx = if idx < 0 { pages.len() as i64 + idx } else { idx };
+    let real_idx = if idx < 0 {
+        pages.len() as i64 + idx
+    } else {
+        idx
+    };
     if real_idx < 0 {
         return None;
     }
@@ -2293,7 +2383,10 @@ fn rf_decode_elem(
 
         let (name, page_raw, elem_id) = {
             let list = rf_req!(elem.as_list(), "форма: панель не список");
-            rf_req!(rf_leaf_tail(list), "форма: панель — не хватает хвостовых полей")
+            rf_req!(
+                rf_leaf_tail(list),
+                "форма: панель — не хватает хвостовых полей"
+            )
         };
         let page_name: Option<String> = rf_req!(
             rf_resolve_page(&page_raw, pages),
@@ -2301,7 +2394,8 @@ fn rf_decode_elem(
         );
         // saby: new_path = elem_id.replace('includr_', 'include_'), где elem_id тут —
         // `calc_id(path, page_name, name)` (результат `add_elem`).
-        let new_path = calc_id(path, page_name.as_deref(), Some(&name)).replace("includr_", "include_");
+        let new_path =
+            calc_id(path, page_name.as_deref(), Some(&name)).replace("includr_", "include_");
 
         // Пункт данных группы вставляется в data ДО рекурсии (saby: `add_elem` вызывается
         // раньше `decode_pages`/`decode_elements` — это определяет ПОЗИЦИЮ ключа в итоговом
@@ -2550,7 +2644,9 @@ fn decode_regular_form(
         content.find(form_uuid),
         format!("нет дескриптора обычной формы \"{form_uuid}\"")
     );
-    let mut fh = V8Value::List(vec![parse_bytes_utf8_or_1251(&try_inflate(&fh_entry.data))?]);
+    let mut fh = V8Value::List(vec![parse_bytes_utf8_or_1251(&try_inflate(
+        &fh_entry.data,
+    ))?]);
 
     // saby `Form.get_form_root`: obj_version-дискриминатор — это НЕ признак «обычная/управляемая
     // форма» (тот определяется отдельно, полем «Тип формы» ниже), а версия РАСКЛАДКИ заголовка:
@@ -2604,14 +2700,24 @@ fn decode_regular_form(
         .unwrap_or(0);
     let mut name2: Vec<(String, String)> = Vec::with_capacity(name2_count);
     for i in 0..name2_count {
-        let key = text_of(req!(n2.get(1 + 2 * i), format!("форма name2[{i}]: нет key")));
-        let val = text_of(req!(n2.get(2 + 2 * i), format!("форма name2[{i}]: нет val")));
+        let key = text_of(req!(
+            n2.get(1 + 2 * i),
+            format!("форма name2[{i}]: нет key")
+        ));
+        let val = text_of(req!(
+            n2.get(2 + 2 * i),
+            format!("форма name2[{i}]: нет val")
+        ));
         name2.push((key, val));
     }
 
     let comment = text_of(req!(fh.path(&comment_path), "форма: нет пути comment"));
 
-    if !set_at_path(&mut fh, &uuid_path, V8Value::Raw("в отдельном файле".to_string())) {
+    if !set_at_path(
+        &mut fh,
+        &uuid_path,
+        V8Value::Raw("в отдельном файле".to_string()),
+    ) {
         return Ok(UnpackOutcome::Unsupported(
             "форма: не удалось подставить маркер id по пути uuid".to_string(),
         ));
@@ -2638,18 +2744,21 @@ fn decode_regular_form(
     // fc = List([form_big]) — та же схема «на диске плоско → в выводе список из одного
     // элемента», что и у управляемой формы; form_big — «большой список» формы (тип "26"/"27"
     // первым элементом).
-    let mut fc = V8Value::List(vec![parse_bytes_utf8_or_1251(&try_inflate(&form_subentry.data))?]);
+    let mut fc = V8Value::List(vec![parse_bytes_utf8_or_1251(&try_inflate(
+        &form_subentry.data,
+    ))?]);
 
     let module_entry = req!(
         fc_container.find("module"),
         format!("{form_uuid}.0: нет entry \"module\"")
     );
     let module_data = try_inflate(&module_entry.data);
-    let (code_encoding_obj, module_no_bom): (&str, &[u8]) = if module_data.starts_with(&[0xEF, 0xBB, 0xBF]) {
-        ("utf-8-sig", &module_data[3..])
-    } else {
-        ("utf-8", &module_data[..])
-    };
+    let (code_encoding_obj, module_no_bom): (&str, &[u8]) =
+        if module_data.starts_with(&[0xEF, 0xBB, 0xBF]) {
+            ("utf-8-sig", &module_data[3..])
+        } else {
+            ("utf-8", &module_data[..])
+        };
     let code_text_raw = match std::str::from_utf8(module_no_bom) {
         Ok(s) => s.to_string(),
         Err(_) => {
@@ -2661,7 +2770,10 @@ fn decode_regular_form(
     let code_obj = rf_uncomment_directives(&normalize_newlines(&code_text_raw));
 
     // ─── form_big = fc[0] («большой список» формы) ──────────────────────────────────────────
-    let form_ver = text_of(req!(fc.path(&[0, 0]), "форма: нет пути [0,0] (версия элементов)"));
+    let form_ver = text_of(req!(
+        fc.path(&[0, 0]),
+        "форма: нет пути [0,0] (версия элементов)"
+    ));
     let (elements_ver, name_index): (i64, usize) = match form_ver.as_str() {
         "26" => (26, 3),
         "27" => (27, 4),
@@ -2738,7 +2850,10 @@ fn decode_regular_form(
         ("header".to_string(), saby_json(&fh)),
         ("Тип формы".to_string(), J::Str("0".to_string())),
         ("form".to_string(), form_field),
-        ("code_encoding_obj".to_string(), J::Str(code_encoding_obj.to_string())),
+        (
+            "code_encoding_obj".to_string(),
+            J::Str(code_encoding_obj.to_string()),
+        ),
         ("code_info_obj".to_string(), J::Num(1)),
         (
             "Версия элементов формы".to_string(),
@@ -2750,13 +2865,19 @@ fn decode_regular_form(
 
     let target = dest_dir.join(class_name).join(&name);
     std::fs::create_dir_all(&target)?;
-    std::fs::write(target.join(format!("{class_name}.json")), json_text.as_bytes())?;
+    std::fs::write(
+        target.join(format!("{class_name}.json")),
+        json_text.as_bytes(),
+    )?;
 
     // Код модуля формы (OF): в отличие от кода объекта (decode_code — пишется только при
     // непустом тексте), decode_form0_from_dir всегда ставит code_info_obj=1, и файл .obj.bsl
     // пишется безусловно (проверено по golden-фикстуре с пустым модулем).
     let bsl_text = strip_include_areas(&code_obj).replace('\n', "\r\n");
-    std::fs::write(target.join(format!("{class_name}.obj.bsl")), bsl_text.as_bytes())?;
+    std::fs::write(
+        target.join(format!("{class_name}.obj.bsl")),
+        bsl_text.as_bytes(),
+    )?;
 
     let elem_obj = J::Obj(vec![
         ("params".to_string(), J::Arr(Vec::new())),
@@ -2772,11 +2893,17 @@ fn decode_regular_form(
         ("data".to_string(), J::Obj(data_entries)),
     ]);
     let elem_json_text = elem_obj.to_pretty_string().replace('\n', "\r\n");
-    std::fs::write(target.join(format!("{class_name}.elem.json")), elem_json_text.as_bytes())?;
+    std::fs::write(
+        target.join(format!("{class_name}.elem.json")),
+        elem_json_text.as_bytes(),
+    )?;
 
     let id_obj = J::Obj(vec![("uuid".to_string(), J::Str(uuid))]);
     let id_json_text = id_obj.to_pretty_string().replace('\n', "\r\n");
-    std::fs::write(target.join(format!("{class_name}.id.json")), id_json_text.as_bytes())?;
+    std::fs::write(
+        target.join(format!("{class_name}.id.json")),
+        id_json_text.as_bytes(),
+    )?;
 
     Ok(UnpackOutcome::Done)
 }
@@ -2866,15 +2993,13 @@ mod tests {
         }
         let epf_bytes = std::fs::read(FIXTURE_EPF).expect("читать фикстуру .epf");
 
-        let dest_dir = std::env::temp_dir().join(format!(
-            "1c_export_saby_golden_test_{}",
-            std::process::id()
-        ));
+        let dest_dir =
+            std::env::temp_dir().join(format!("1c_export_saby_golden_test_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dest_dir);
         std::fs::create_dir_all(&dest_dir).expect("создать temp-каталог для теста");
 
-        let outcome =
-            unpack_epf_skeleton(&epf_bytes, &dest_dir).expect("unpack_epf_skeleton не должен падать");
+        let outcome = unpack_epf_skeleton(&epf_bytes, &dest_dir)
+            .expect("unpack_epf_skeleton не должен падать");
         assert!(
             matches!(outcome, UnpackOutcome::Done),
             "ожидался UnpackOutcome::Done, получено {outcome:?}"
@@ -2882,8 +3007,8 @@ mod tests {
 
         let actual_json = std::fs::read(dest_dir.join("ExternalDataProcessor.json"))
             .expect("читать выгруженный ExternalDataProcessor.json");
-        let expected_json =
-            std::fs::read(FIXTURE_EXPECTED_JSON).expect("читать эталонный ExternalDataProcessor.json");
+        let expected_json = std::fs::read(FIXTURE_EXPECTED_JSON)
+            .expect("читать эталонный ExternalDataProcessor.json");
         assert_bytes_eq(&actual_json, &expected_json, "ExternalDataProcessor.json");
 
         let actual_bsl = std::fs::read(dest_dir.join("ExternalDataProcessor.obj.bsl"))
@@ -2920,8 +3045,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dest_dir);
         std::fs::create_dir_all(&dest_dir).expect("создать temp-каталог для теста");
 
-        let outcome =
-            unpack_epf_skeleton(&erf_bytes, &dest_dir).expect("unpack_epf_skeleton не должен падать");
+        let outcome = unpack_epf_skeleton(&erf_bytes, &dest_dir)
+            .expect("unpack_epf_skeleton не должен падать");
         assert!(
             matches!(outcome, UnpackOutcome::Done),
             "ожидался UnpackOutcome::Done, получено {outcome:?}"
@@ -2958,7 +3083,12 @@ mod tests {
         let mut entries: Vec<_> = std::fs::read_dir(&in_dir)
             .expect("read_dir")
             .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| matches!(p.extension().and_then(|s| s.to_str()), Some("erf") | Some("epf")))
+            .filter(|p| {
+                matches!(
+                    p.extension().and_then(|s| s.to_str()),
+                    Some("erf") | Some("epf")
+                )
+            })
             .collect();
         entries.sort();
         for p in entries {
@@ -2999,8 +3129,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dest_dir);
         std::fs::create_dir_all(&dest_dir).expect("создать temp-каталог для теста");
 
-        let outcome =
-            unpack_epf_skeleton(&epf_bytes, &dest_dir).expect("unpack_epf_skeleton не должен падать");
+        let outcome = unpack_epf_skeleton(&epf_bytes, &dest_dir)
+            .expect("unpack_epf_skeleton не должен падать");
         assert!(
             matches!(outcome, UnpackOutcome::Done),
             "ожидался UnpackOutcome::Done, получено {outcome:?}"
@@ -3050,8 +3180,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dest_dir);
         std::fs::create_dir_all(&dest_dir).expect("создать temp-каталог для теста");
 
-        let outcome =
-            unpack_epf_skeleton(&epf_bytes, &dest_dir).expect("unpack_epf_skeleton не должен падать");
+        let outcome = unpack_epf_skeleton(&epf_bytes, &dest_dir)
+            .expect("unpack_epf_skeleton не должен падать");
         assert!(
             matches!(outcome, UnpackOutcome::Done),
             "ожидался UnpackOutcome::Done, получено {outcome:?}"
@@ -3101,8 +3231,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dest_dir);
         std::fs::create_dir_all(&dest_dir).expect("создать temp-каталог для теста");
 
-        let outcome =
-            unpack_epf_skeleton(&epf_bytes, &dest_dir).expect("unpack_epf_skeleton не должен падать");
+        let outcome = unpack_epf_skeleton(&epf_bytes, &dest_dir)
+            .expect("unpack_epf_skeleton не должен падать");
         assert!(
             matches!(outcome, UnpackOutcome::Done),
             "ожидался UnpackOutcome::Done, получено {outcome:?}"
@@ -3153,8 +3283,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dest_dir);
         std::fs::create_dir_all(&dest_dir).expect("создать temp-каталог для теста");
 
-        let outcome =
-            unpack_epf_skeleton(&epf_bytes, &dest_dir).expect("unpack_epf_skeleton не должен падать");
+        let outcome = unpack_epf_skeleton(&epf_bytes, &dest_dir)
+            .expect("unpack_epf_skeleton не должен падать");
         assert!(
             matches!(outcome, UnpackOutcome::Done),
             "ожидался UnpackOutcome::Done, получено {outcome:?}"
@@ -3204,8 +3334,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dest_dir);
         std::fs::create_dir_all(&dest_dir).expect("создать temp-каталог для теста");
 
-        let outcome =
-            unpack_epf_skeleton(&epf_bytes, &dest_dir).expect("unpack_epf_skeleton не должен падать");
+        let outcome = unpack_epf_skeleton(&epf_bytes, &dest_dir)
+            .expect("unpack_epf_skeleton не должен падать");
         assert!(
             matches!(outcome, UnpackOutcome::Done),
             "ожидался UnpackOutcome::Done, получено {outcome:?}"
@@ -3258,8 +3388,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dest_dir);
         std::fs::create_dir_all(&dest_dir).expect("создать temp-каталог для теста");
 
-        let outcome =
-            unpack_epf_skeleton(&epf_bytes, &dest_dir).expect("unpack_epf_skeleton не должен падать");
+        let outcome = unpack_epf_skeleton(&epf_bytes, &dest_dir)
+            .expect("unpack_epf_skeleton не должен падать");
         assert!(
             matches!(outcome, UnpackOutcome::Done),
             "ожидался UnpackOutcome::Done, получено {outcome:?}"
@@ -3303,8 +3433,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dest_dir);
         std::fs::create_dir_all(&dest_dir).expect("создать temp-каталог для теста");
 
-        let outcome =
-            unpack_epf_skeleton(&epf_bytes, &dest_dir).expect("unpack_epf_skeleton не должен падать");
+        let outcome = unpack_epf_skeleton(&epf_bytes, &dest_dir)
+            .expect("unpack_epf_skeleton не должен падать");
         assert!(
             matches!(outcome, UnpackOutcome::Done),
             "ожидался UnpackOutcome::Done, получено {outcome:?}"
@@ -3348,8 +3478,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dest_dir);
         std::fs::create_dir_all(&dest_dir).expect("создать temp-каталог для теста");
 
-        let outcome =
-            unpack_epf_skeleton(&epf_bytes, &dest_dir).expect("unpack_epf_skeleton не должен падать");
+        let outcome = unpack_epf_skeleton(&epf_bytes, &dest_dir)
+            .expect("unpack_epf_skeleton не должен падать");
         assert!(
             matches!(outcome, UnpackOutcome::Done),
             "ожидался UnpackOutcome::Done, получено {outcome:?}"
@@ -3404,7 +3534,8 @@ mod tests {
         actual_rels.sort();
 
         assert_eq!(
-            actual_rels, expected_rels,
+            actual_rels,
+            expected_rels,
             "набор файлов не совпадает с эталонным (dest={}, expected={})",
             dest_dir.display(),
             expected_root.display()
@@ -3445,8 +3576,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dest_dir);
         std::fs::create_dir_all(&dest_dir).expect("создать temp-каталог для теста");
 
-        let outcome =
-            unpack_epf_skeleton(&epf_bytes, &dest_dir).expect("unpack_epf_skeleton не должен падать");
+        let outcome = unpack_epf_skeleton(&epf_bytes, &dest_dir)
+            .expect("unpack_epf_skeleton не должен падать");
         assert!(
             matches!(outcome, UnpackOutcome::Done),
             "ожидался UnpackOutcome::Done, получено {outcome:?}"
@@ -3481,8 +3612,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dest_dir);
         std::fs::create_dir_all(&dest_dir).expect("создать temp-каталог для теста");
 
-        let outcome =
-            unpack_epf_skeleton(&epf_bytes, &dest_dir).expect("unpack_epf_skeleton не должен падать");
+        let outcome = unpack_epf_skeleton(&epf_bytes, &dest_dir)
+            .expect("unpack_epf_skeleton не должен падать");
         assert!(
             matches!(outcome, UnpackOutcome::Done),
             "ожидался UnpackOutcome::Done, получено {outcome:?}"
@@ -3524,8 +3655,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dest_dir);
         std::fs::create_dir_all(&dest_dir).expect("создать temp-каталог для теста");
 
-        let outcome =
-            unpack_epf_skeleton(&epf_bytes, &dest_dir).expect("unpack_epf_skeleton не должен падать");
+        let outcome = unpack_epf_skeleton(&epf_bytes, &dest_dir)
+            .expect("unpack_epf_skeleton не должен падать");
         assert!(
             matches!(outcome, UnpackOutcome::Done),
             "ожидался UnpackOutcome::Done, получено {outcome:?}"
@@ -3561,8 +3692,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dest_dir);
         std::fs::create_dir_all(&dest_dir).expect("создать temp-каталог для теста");
 
-        let outcome =
-            unpack_epf_skeleton(&epf_bytes, &dest_dir).expect("unpack_epf_skeleton не должен падать");
+        let outcome = unpack_epf_skeleton(&epf_bytes, &dest_dir)
+            .expect("unpack_epf_skeleton не должен падать");
         assert!(
             matches!(outcome, UnpackOutcome::Done),
             "ожидался UnpackOutcome::Done, получено {outcome:?}"

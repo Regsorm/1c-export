@@ -47,10 +47,6 @@ pub struct ProcessingsParams<'a> {
     /// Готовые имена таблицы/полей. Резолвятся в вызывающем коде
     /// (`ExportCoordinator::resolve_processings_mapping`).
     pub mapping: StorageMapping,
-    /// Мапа HEX UUID → имя элемента перечисления `ВидыДополнительныхОтчётовИОбработок`.
-    /// Заполняется через MCP HTTP-запрос к ИБ. Пустая мапа = не определено,
-    /// тогда `process_entry` сохраняет файлы как `.epf` (поведение по умолчанию).
-    pub kind_uuid_to_name: std::collections::HashMap<String, String>,
 }
 
 /// Физические имена таблицы и полей в MSSQL для справочника
@@ -130,8 +126,10 @@ pub struct ProcessingsResult {
 /// Длинные имена обрезаются до 80 символов (далее — невидимы в Проводнике).
 pub fn sanitize_filename(name: &str) -> String {
     const BAD: &[char] = &['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
-    const SOFT_BAD: &[char] = &[',', ';', '(', ')', '[', ']', '{', '}', '!', '@', '#',
-                                '$', '%', '^', '&', '+', '=', '`', '~', '\'', '.'];
+    const SOFT_BAD: &[char] = &[
+        ',', ';', '(', ')', '[', ']', '{', '}', '!', '@', '#', '$', '%', '^', '&', '+', '=', '`',
+        '~', '\'', '.',
+    ];
     let mut result: String = name
         .chars()
         .map(|c| {
@@ -179,7 +177,9 @@ pub fn ext_by_kind(kind: &str) -> &'static str {
 /// Чтение лог-файла от 1С (/Out). 1С пишет логи в UTF-8 (новые платформы)
 /// или в CP1251 (старые конфигурации Windows-русский). Пробуем в порядке.
 fn read_log_file(path: &Path) -> String {
-    let Ok(bytes) = std::fs::read(path) else { return String::new() };
+    let Ok(bytes) = std::fs::read(path) else {
+        return String::new();
+    };
     if bytes.is_empty() {
         return String::new();
     }
@@ -269,13 +269,23 @@ pub fn value_storage_to_binary(vs: &[u8]) -> Result<Vec<u8>, ExportError> {
                 .join(" ");
             let ascii: String = preview_bytes
                 .iter()
-                .map(|&x| if (0x20..0x7F).contains(&x) { x as char } else { '.' })
+                .map(|&x| {
+                    if (0x20..0x7F).contains(&x) {
+                        x as char
+                    } else {
+                        '.'
+                    }
+                })
                 .collect();
             Err(ExportError::ValueStorage(format!(
                 "неизвестный заголовок ValueStorage: 0x{:02X} 0x{:02X} (размер={} байт)\n\
                  первые 32 байта hex : {}\n\
                  первые 32 байта ASCII: {}",
-                a, b, vs.len(), hex, ascii
+                a,
+                b,
+                vs.len(),
+                hex,
+                ascii
             )))
         }
     }
@@ -368,12 +378,10 @@ pub(crate) async fn connect_mssql_raw(
 
     match db_auth {
         IbcmdDbAuth::SqlLogin => {
-            let user = db_user.ok_or_else(|| {
-                ExportError::Sql("SQL-логин не указан (--ibcmd-db-user)".into())
-            })?;
-            let pwd = db_pwd.ok_or_else(|| {
-                ExportError::Sql("SQL-пароль не указан (--ibcmd-db-pwd)".into())
-            })?;
+            let user = db_user
+                .ok_or_else(|| ExportError::Sql("SQL-логин не указан (--ibcmd-db-user)".into()))?;
+            let pwd = db_pwd
+                .ok_or_else(|| ExportError::Sql("SQL-пароль не указан (--ibcmd-db-pwd)".into()))?;
             config.authentication(AuthMethod::sql_server(user, pwd));
         }
         IbcmdDbAuth::Windows => {
@@ -404,7 +412,10 @@ async fn fetch_current_rows(
     // Для строкового hash (КонтрольнаяСумма) — читаем как NVARCHAR.
     // Для бинарного (ВерсияДанных, rowversion 8 байт) — конвертим в hex через стиль 2.
     let hash_select = if mapping.hash_is_binary {
-        format!("CONVERT(VARCHAR(130), CAST({} AS VARBINARY(64)), 2)", mapping.field_hash)
+        format!(
+            "CONVERT(VARCHAR(130), CAST({} AS VARBINARY(64)), 2)",
+            mapping.field_hash
+        )
     } else {
         format!("RTRIM(CONVERT(NVARCHAR(64), {}))", mapping.field_hash)
     };
@@ -655,9 +666,11 @@ impl DiscoveryDto {
 /// - в общем модуле `Расш2_ВыгрузкаДопОбработокИОтчетовСервер` добавлена
 ///   процедура `ПолучитьСтруктуруХраненияСправочникаДопОбработок`
 ///   (см. resources/ПолучитьСтруктуруХраненияСправочникаДопОбработок.bsl.txt).
-pub fn discover_storage_via_extension(
-    config: &AppConfig,
-) -> Result<StorageMapping, ExportError> {
+#[expect(
+    dead_code,
+    reason = "зарезервировано как legacy-fallback до подключения к основному пути"
+)]
+pub fn discover_storage_via_extension(config: &AppConfig) -> Result<StorageMapping, ExportError> {
     // Временные пути для JSON-ответа и лога 1С (/Out).
     // ВАЖНО: JSON создаётся СЕРВЕРОМ 1С (процедура &НаСервере). Если сервер
     // 1С на другой машине — локальный %TEMP% клиента ему недоступен.
@@ -701,11 +714,14 @@ pub fn discover_storage_via_extension(
 
     Logger::log(
         "Запуск discovery через ENTERPRISE /C BatchGetProcessingsStructure \
-         (обработчик в расширении ВыгрузкаВсехВнешнихОбработок)"
+         (обработчик в расширении ВыгрузкаВсехВнешнихОбработок)",
     );
 
     let result = ProcessRunner::run(&cmd).map_err(|e| {
-        ExportError::Config(format!("не удалось запустить Enterprise для discovery: {}", e))
+        ExportError::Config(format!(
+            "не удалось запустить Enterprise для discovery: {}",
+            e
+        ))
     })?;
 
     // Прочитать лог 1С (utf-8, fallback на cp1251), удалить temp-файл.
@@ -725,7 +741,11 @@ pub fn discover_storage_via_extension(
             message: format!(
                 "Enterprise BatchGetProcessingsStructure упал. \
                  Лог 1С: {} | stdout: {} | stderr: {}",
-                if log_content.trim().is_empty() { "<пусто>".to_string() } else { log_content.clone() },
+                if log_content.trim().is_empty() {
+                    "<пусто>".to_string()
+                } else {
+                    log_content.clone()
+                },
                 result.stdout,
                 result.stderr
             ),
@@ -741,7 +761,11 @@ pub fn discover_storage_via_extension(
              Добавьте блок из resources/ManagedApplicationModule_patch.bsl.txt в \
              ManagedApplicationModule.bsl расширения и примените (F7).",
             json_out.display(),
-            if log_content.trim().is_empty() { "<пусто>".to_string() } else { log_content }
+            if log_content.trim().is_empty() {
+                "<пусто>".to_string()
+            } else {
+                log_content
+            }
         )));
     }
 
@@ -780,18 +804,19 @@ pub fn discover_storage_via_extension(
 
     // Маркер изменения: КонтрольнаяСумма (MD5, если БСП хранит) → fallback
     // ВерсияДанных (стандартный rowversion, обновляется автоматически при изменении).
-    let (hash, hash_is_binary) = if let Some(v) = dto.pick_single_storage("КонтрольнаяСумма") {
+    let (hash, hash_is_binary) = if let Some(v) = dto.pick_single_storage("КонтрольнаяСумма")
+    {
         (v, false)
     } else if let Some(v) = dto.pick_single_storage("ВерсияДанных") {
         Logger::log(
             "Справочник БСП не имеет реквизита КонтрольнаяСумма — \
-             используем стандартный ВерсияДанных (rowversion) как маркер изменения."
+             используем стандартный ВерсияДанных (rowversion) как маркер изменения.",
         );
         (v, true)
     } else {
-        return Err(ExportError::Config(
-            missing_field_msg("КонтрольнаяСумма или ВерсияДанных")
-        ));
+        return Err(ExportError::Config(missing_field_msg(
+            "КонтрольнаяСумма или ВерсияДанных",
+        )));
     };
 
     // "Вид" не используется — все выгружаем как .epf в плоскую папку processings/.
@@ -805,7 +830,11 @@ pub fn discover_storage_via_extension(
     // 1С возвращает имена без префикса "_", а в MSSQL физические имена всегда с "_".
     // Нормализуем: добавляем префикс если его нет.
     fn prefix_underscore(s: String) -> String {
-        if s.starts_with('_') { s } else { format!("_{}", s) }
+        if s.starts_with('_') {
+            s
+        } else {
+            format!("_{}", s)
+        }
     }
 
     let mapping = StorageMapping {
@@ -878,7 +907,11 @@ async fn run_async(
         Logger::log("Доп.обработки: ПОЛНАЯ перезапись — чистка External/");
         if output_dir.exists() {
             if let Err(e) = std::fs::remove_dir_all(output_dir) {
-                Logger::log(&format!("⚠ не удалось очистить {}: {}", output_dir.display(), e));
+                Logger::log(&format!(
+                    "⚠ не удалось очистить {}: {}",
+                    output_dir.display(),
+                    e
+                ));
             }
         }
         std::fs::create_dir_all(output_dir)?;
@@ -899,11 +932,17 @@ async fn run_async(
 
     let kind_map = build_kind_map(&mut client, &params.mapping.enum_table).await;
     if !kind_map.is_empty() {
-        Logger::log(&format!("✓ Карта видов из таблицы перечисления: {} элементов", kind_map.len()));
+        Logger::log(&format!(
+            "✓ Карта видов из таблицы перечисления: {} элементов",
+            kind_map.len()
+        ));
     }
 
     let rows = fetch_current_rows(&mut client, &params.mapping).await?;
-    Logger::log(&format!("✓ Справочник содержит {} записей (без групп, без помеченных)", rows.len()));
+    Logger::log(&format!(
+        "✓ Справочник содержит {} записей (без групп, без помеченных)",
+        rows.len()
+    ));
 
     // Классификация: new / changed / unchanged / deleted.
     let mut to_fetch: Vec<String> = Vec::new();
@@ -966,7 +1005,16 @@ async fn run_async(
                 continue;
             }
         };
-        match process_entry(output_dir, row, vs, &mut manifest, params.mapping.hash_is_binary, &kind_map).await {
+        match process_entry(
+            output_dir,
+            row,
+            vs,
+            &mut manifest,
+            params.mapping.hash_is_binary,
+            &kind_map,
+        )
+        .await
+        {
             Ok((is_new, safe_name)) => {
                 if is_new {
                     result.new += 1;
@@ -979,7 +1027,10 @@ async fn run_async(
                 let msg = e.to_string();
                 // Пустая запись (нет .epf) — не ошибка, просто пропускаем.
                 if msg.contains("STORHDR") {
-                    Logger::log(&format!("ℹ {}: пустая обработка (нет .epf), пропущено", row.name));
+                    Logger::log(&format!(
+                        "ℹ {}: пустая обработка (нет .epf), пропущено",
+                        row.name
+                    ));
                     result.skipped_empty.push(row.name.clone());
                 } else {
                     Logger::log(&format!("⚠ {}: {}", row.name, msg));
@@ -1124,7 +1175,10 @@ mod tests {
     #[test]
     fn sanitize_basic() {
         assert_eq!(sanitize_filename("Нормальное имя"), "Нормальное имя");
-        assert_eq!(sanitize_filename("a<b>c:d|e?f*g\"h/i\\j"), "a_b_c_d_e_f_g_h_i_j");
+        assert_eq!(
+            sanitize_filename("a<b>c:d|e?f*g\"h/i\\j"),
+            "a_b_c_d_e_f_g_h_i_j"
+        );
         assert_eq!(sanitize_filename("имя с точкой..."), "имя с точкой");
         assert_eq!(sanitize_filename("   "), "_unnamed");
     }
@@ -1177,10 +1231,8 @@ mod tests {
 
         let mut compressed = Vec::new();
         {
-            let mut encoder = flate2::write::DeflateEncoder::new(
-                &mut compressed,
-                flate2::Compression::fast(),
-            );
+            let mut encoder =
+                flate2::write::DeflateEncoder::new(&mut compressed, flate2::Compression::fast());
             encoder.write_all(&payload).unwrap();
             encoder.finish().unwrap();
         }

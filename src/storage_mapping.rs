@@ -179,11 +179,19 @@ pub fn parse_storage_mapping(text: &str, target_meta: &str) -> anyhow::Result<St
 
     let field_storage = fields
         .get(META_FIELD_STORAGE)
-        .ok_or_else(|| anyhow::anyhow!("поле '{}' не найдено в таблице {}", META_FIELD_STORAGE, table))?
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "поле '{}' не найдено в таблице {}",
+                META_FIELD_STORAGE,
+                table
+            )
+        })?
         .clone();
     let field_kind = fields
         .get(META_FIELD_KIND)
-        .ok_or_else(|| anyhow::anyhow!("поле '{}' не найдено в таблице {}", META_FIELD_KIND, table))?
+        .ok_or_else(|| {
+            anyhow::anyhow!("поле '{}' не найдено в таблице {}", META_FIELD_KIND, table)
+        })?
         .clone();
 
     // Hash: предпочитаем КонтрольнаяСумма (новые БСП), fallback на _Version (rowversion).
@@ -242,12 +250,19 @@ _KeyField
 
     #[test]
     fn parses_bp_with_version_fallback() {
-        let m = parse_storage_mapping(BP_NO_CHECKSUM_RESPONSE, "Справочник.ДополнительныеОтчетыИОбработки").unwrap();
+        let m = parse_storage_mapping(
+            BP_NO_CHECKSUM_RESPONSE,
+            "Справочник.ДополнительныеОтчетыИОбработки",
+        )
+        .unwrap();
         assert_eq!(m.table, "_Reference181");
         assert_eq!(m.field_storage, "_Fld4776");
         assert_eq!(m.field_kind, "_Fld4766RRef");
         assert_eq!(m.field_hash, "_Version");
-        assert!(m.hash_is_binary, "fallback на _Version → бинарный rowversion");
+        assert!(
+            m.hash_is_binary,
+            "fallback на _Version → бинарный rowversion"
+        );
     }
 
     #[test]
@@ -307,7 +322,8 @@ _Fld25150 = ХранилищеОбработки [рекв]
 _Reference181_VT4780 (Справочник.ДополнительныеОтчетыИОбработки.ТабличнаяЧасть.Команды, ТабличнаяЧасть):
 _Fld1 = Ссылка
 "#;
-        let err = parse_storage_mapping(text, "Справочник.ДополнительныеОтчетыИОбработки").unwrap_err();
+        let err =
+            parse_storage_mapping(text, "Справочник.ДополнительныеОтчетыИОбработки").unwrap_err();
         assert!(format!("{}", err).contains("Основная"));
     }
 
@@ -319,7 +335,8 @@ _IDRRef = Ссылка
 _Version = ВерсияДанных
 _Fld4766RRef = Вид [рекв]
 "#;
-        let err = parse_storage_mapping(text, "Справочник.ДополнительныеОтчетыИОбработки").unwrap_err();
+        let err =
+            parse_storage_mapping(text, "Справочник.ДополнительныеОтчетыИОбработки").unwrap_err();
         assert!(format!("{}", err).contains("ХранилищеОбработки"));
     }
 
@@ -330,7 +347,8 @@ _Enum1315 (Перечисление.ВидыДополнительныхОтче
 _IDRRef = Ссылка
 _EnumOrder = Порядок
 "#;
-        let table = parse_enum_table(text, "Перечисление.ВидыДополнительныхОтчетовИОбработок").unwrap();
+        let table =
+            parse_enum_table(text, "Перечисление.ВидыДополнительныхОтчетовИОбработок").unwrap();
         assert_eq!(table, "_Enum1315");
     }
 
@@ -340,7 +358,8 @@ _EnumOrder = Порядок
 _Reference181 (Справочник.ДополнительныеОтчетыИОбработки, Основная):
 _IDRRef = Ссылка
 "#;
-        let err = parse_enum_table(text, "Перечисление.ВидыДополнительныхОтчетовИОбработок").unwrap_err();
+        let err =
+            parse_enum_table(text, "Перечисление.ВидыДополнительныхОтчетовИОбработок").unwrap_err();
         assert!(format!("{}", err).contains("Основная"));
     }
 
@@ -352,6 +371,9 @@ _IDRRef = Ссылка
             "Справочник.ДополнительныеОтчетыИОбработки",
         )
         .unwrap_err();
-        assert!(format!("{}", err).contains("Таблица не найдена"), "текст ответа должен попасть в ошибку");
+        assert!(
+            format!("{}", err).contains("Таблица не найдена"),
+            "текст ответа должен попасть в ошибку"
+        );
     }
 }

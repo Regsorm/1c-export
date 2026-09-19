@@ -98,10 +98,9 @@ fn window_before(text: &str, pos: usize, chars: usize) -> &str {
 /// перед его именем, поэтому берём последний идентификатор из окна перед именем,
 /// который известен карте `Fld`.
 fn find_field_number(desc: &str, field: &str, fld: &HashMap<String, u32>) -> Option<u32> {
-    let re = Regex::new(
-        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
-    )
-    .expect("регулярное выражение идентификатора корректно");
+    let re =
+        Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+            .expect("регулярное выражение идентификатора корректно");
 
     let pos = desc.find(&format!("\"{}\"", field))?;
     let window = window_before(desc, pos, UUID_LOOKBEHIND_CHARS);
@@ -304,14 +303,20 @@ pub async fn discover_via_sql(
         let field_storage = match resolve_column(desc, META_FIELD_STORAGE, &names.fld, &cols) {
             Some(c) => c,
             None => {
-                last_err = format!("в таблице {} не опознан реквизит {}", table, META_FIELD_STORAGE);
+                last_err = format!(
+                    "в таблице {} не опознан реквизит {}",
+                    table, META_FIELD_STORAGE
+                );
                 continue;
             }
         };
         let field_kind = match resolve_column(desc, META_FIELD_KIND, &names.fld, &cols) {
             Some(c) => c,
             None => {
-                last_err = format!("в таблице {} не опознан реквизит {}", table, META_FIELD_KIND);
+                last_err = format!(
+                    "в таблице {} не опознан реквизит {}",
+                    table, META_FIELD_KIND
+                );
                 continue;
             }
         };
@@ -394,7 +399,10 @@ mod tests {
             n.enums,
             vec![("752dc569-cf84-42d7-911d-49d455f7214e".to_string(), 1315)]
         );
-        assert_eq!(n.fld.get("d81b1a3f-1111-2222-3333-444455556666"), Some(&4776));
+        assert_eq!(
+            n.fld.get("d81b1a3f-1111-2222-3333-444455556666"),
+            Some(&4776)
+        );
         // Строка DbSegments — не Reference/Fld/Enum, в карты попадать не должна.
         assert_eq!(n.fld.len(), 1);
     }
@@ -413,7 +421,10 @@ mod tests {
             "{d81b1a3f-1111-2222-3333-444455556666,0},\"ХранилищеОбработки\",{\"ru\",\"Хранилище\"}"
         );
 
-        assert_eq!(find_field_number(desc, "ХранилищеОбработки", &fld), Some(4776));
+        assert_eq!(
+            find_field_number(desc, "ХранилищеОбработки", &fld),
+            Some(4776)
+        );
         assert_eq!(find_field_number(desc, "Вид", &fld), Some(4766));
         assert_eq!(find_field_number(desc, "КонтрольнаяСумма", &fld), None);
     }

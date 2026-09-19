@@ -35,9 +35,9 @@ use crate::state::BaseState;
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct LogEvent {
     #[serde(rename = "Дата")]
-    pub date: String,           // "2026-04-26T21:02:38"
+    pub date: String, // "2026-04-26T21:02:38"
     #[serde(rename = "Событие")]
-    pub event: String,          // "_$InfoBase$_.DBConfigUpdate"
+    pub event: String, // "_$InfoBase$_.DBConfigUpdate"
     #[serde(rename = "ИмяПользователя", default)]
     pub user: String,
     #[serde(rename = "Метаданные", default)]
@@ -106,8 +106,13 @@ pub async fn query_new_events(
         .await?;
 
     // 3. Парсим: ожидаем { "success": true, "items": [...], "meta": {...} }
-    let parsed: serde_json::Value = serde_json::from_str(&resp_text)
-        .map_err(|e| anyhow::anyhow!("eventlog_query возврат не JSON: {}\nbody[:500]={}", e, &resp_text.chars().take(500).collect::<String>()))?;
+    let parsed: serde_json::Value = serde_json::from_str(&resp_text).map_err(|e| {
+        anyhow::anyhow!(
+            "eventlog_query возврат не JSON: {}\nbody[:500]={}",
+            e,
+            &resp_text.chars().take(500).collect::<String>()
+        )
+    })?;
     let items = parsed
         .get("items")
         .and_then(|v| v.as_array())
@@ -164,9 +169,21 @@ mod tests {
 
     #[test]
     fn hash_stable_and_distinct() {
-        let a = ev("2026-04-26T21:02:38", "_$InfoBase$_.DBConfigUpdate", "Иванов");
-        let b = ev("2026-04-26T21:02:38", "_$InfoBase$_.DBConfigUpdate", "Иванов");
-        let c = ev("2026-04-26T21:02:38", "_$InfoBase$_.DBConfigUpdate", "Петров");
+        let a = ev(
+            "2026-04-26T21:02:38",
+            "_$InfoBase$_.DBConfigUpdate",
+            "Иванов",
+        );
+        let b = ev(
+            "2026-04-26T21:02:38",
+            "_$InfoBase$_.DBConfigUpdate",
+            "Иванов",
+        );
+        let c = ev(
+            "2026-04-26T21:02:38",
+            "_$InfoBase$_.DBConfigUpdate",
+            "Петров",
+        );
         assert_eq!(a.hash(), b.hash(), "одинаковые события — одинаковый хэш");
         assert_ne!(a.hash(), c.hash(), "разные пользователи — разные хэши");
     }
@@ -177,13 +194,19 @@ mod tests {
         let events = vec![
             ev("2026-04-26T21:00:00", "X", "U1"),
             ev("2026-04-26T21:02:38", "X", "U1"),
-            ev("2026-04-26T21:02:38", "X", "U2"),  // тот же timestamp, другой пользователь
-            ev("2026-04-26T21:02:38", "Y", "U1"),  // тот же timestamp, другое событие
+            ev("2026-04-26T21:02:38", "X", "U2"), // тот же timestamp, другой пользователь
+            ev("2026-04-26T21:02:38", "Y", "U1"), // тот же timestamp, другое событие
         ];
         mark_events_processed(&mut state, &events);
-        assert_eq!(state.last_processed_at.as_deref(), Some("2026-04-26T21:02:38"));
-        assert_eq!(state.processed_hashes_at_last_dt.len(), 3,
-            "три события ровно с max-timestamp должны попасть в дедуп-набор");
+        assert_eq!(
+            state.last_processed_at.as_deref(),
+            Some("2026-04-26T21:02:38")
+        );
+        assert_eq!(
+            state.processed_hashes_at_last_dt.len(),
+            3,
+            "три события ровно с max-timestamp должны попасть в дедуп-набор"
+        );
         // Хэш события с timestamp 21:00:00 не должен оказаться в наборе
         let h_old = ev("2026-04-26T21:00:00", "X", "U1").hash();
         assert!(!state.processed_hashes_at_last_dt.contains(&h_old));
@@ -198,7 +221,10 @@ mod tests {
         };
         mark_events_processed(&mut state, &[]);
         // Курсор не двигается при пустом наборе
-        assert_eq!(state.last_processed_at.as_deref(), Some("2026-04-26T20:00:00"));
+        assert_eq!(
+            state.last_processed_at.as_deref(),
+            Some("2026-04-26T20:00:00")
+        );
         assert_eq!(state.processed_hashes_at_last_dt, vec!["x".to_string()]);
     }
 }

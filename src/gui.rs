@@ -309,7 +309,10 @@ impl App {
             .flags(nwg::WindowFlags::MAIN_WINDOW | nwg::WindowFlags::VISIBLE)
             .size((800, 780))
             .position((250, 80))
-            .title(&format!("Выгрузка конфигурации 1С (IBCMD) — v{}", env!("CARGO_PKG_VERSION")))
+            .title(&format!(
+                "Выгрузка конфигурации 1С (IBCMD) — v{}",
+                env!("CARGO_PKG_VERSION")
+            ))
             .build(&mut app.window)?;
         Logger::debug("GUI: окно создано");
 
@@ -327,20 +330,46 @@ impl App {
         Logger::debug("GUI: статусбар создан");
 
         // Верхняя строка — выбор базы
-        nwg::Label::builder().parent(&app.window).position((10, 12)).size((45, 22))
-            .text("База:").build(&mut app.lbl_base)?;
-        nwg::ComboBox::builder().parent(&app.window).position((58, 8)).size((220, 26))
+        nwg::Label::builder()
+            .parent(&app.window)
+            .position((10, 12))
+            .size((45, 22))
+            .text("База:")
+            .build(&mut app.lbl_base)?;
+        nwg::ComboBox::builder()
+            .parent(&app.window)
+            .position((58, 8))
+            .size((220, 26))
             .build(&mut app.cmb_base)?;
-        nwg::Label::builder().parent(&app.window).position((290, 12)).size((490, 22))
-            .text("").build(&mut app.lbl_base_src)?;
+        nwg::Label::builder()
+            .parent(&app.window)
+            .position((290, 12))
+            .size((490, 22))
+            .text("")
+            .build(&mut app.lbl_base_src)?;
         Logger::debug("GUI: комбобокс выбора базы создан");
 
-        nwg::TabsContainer::builder().parent(&app.window)
-            .position((5, 40)).size((778, 690)).build(&mut app.tabs)?;
-        nwg::Tab::builder().parent(&app.tabs).text("Настройки").build(&mut app.tab_settings)?;
-        nwg::Tab::builder().parent(&app.tabs).text("Выгрузка").build(&mut app.tab_export)?;
-        nwg::Tab::builder().parent(&app.tabs).text("Лог").build(&mut app.tab_log)?;
-        nwg::Tab::builder().parent(&app.tabs).text("История").build(&mut app.tab_history)?;
+        nwg::TabsContainer::builder()
+            .parent(&app.window)
+            .position((5, 40))
+            .size((778, 690))
+            .build(&mut app.tabs)?;
+        nwg::Tab::builder()
+            .parent(&app.tabs)
+            .text("Настройки")
+            .build(&mut app.tab_settings)?;
+        nwg::Tab::builder()
+            .parent(&app.tabs)
+            .text("Выгрузка")
+            .build(&mut app.tab_export)?;
+        nwg::Tab::builder()
+            .parent(&app.tabs)
+            .text("Лог")
+            .build(&mut app.tab_log)?;
+        nwg::Tab::builder()
+            .parent(&app.tabs)
+            .text("История")
+            .build(&mut app.tab_history)?;
         Logger::debug("GUI: контейнер вкладок создан");
 
         app.build_tab_settings()?;
@@ -370,65 +399,154 @@ impl App {
 
     fn build_tab_settings(&mut self) -> Result<(), nwg::NwgError> {
         let p = &self.tab_settings;
-        nwg::Label::builder().parent(p).position((10, 10)).size((400, 22))
-            .text("Подключение").build(&mut self.lbl_conn)?;
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 10))
+            .size((400, 22))
+            .text("Подключение")
+            .build(&mut self.lbl_conn)?;
 
-        nwg::Label::builder().parent(p).position((10, 42)).size((W_LABEL, 22))
-            .text("Сервер MSSQL:").build(&mut self.lbl_server)?;
-        nwg::TextInput::builder().parent(p).position((X_INPUT, 40)).size((300, 24))
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 42))
+            .size((W_LABEL, 22))
+            .text("Сервер MSSQL:")
+            .build(&mut self.lbl_server)?;
+        nwg::TextInput::builder()
+            .parent(p)
+            .position((X_INPUT, 40))
+            .size((300, 24))
             .build(&mut self.in_server)?;
 
-        nwg::Label::builder().parent(p).position((10, 72)).size((W_LABEL, 22))
-            .text("Сервер 1С:").build(&mut self.lbl_server1c)?;
-        nwg::TextInput::builder().parent(p).position((X_INPUT, 70)).size((300, 24))
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 72))
+            .size((W_LABEL, 22))
+            .text("Сервер 1С:")
+            .build(&mut self.lbl_server1c)?;
+        nwg::TextInput::builder()
+            .parent(p)
+            .position((X_INPUT, 70))
+            .size((300, 24))
             .build(&mut self.in_server1c)?;
 
-        nwg::Label::builder().parent(p).position((10, 102)).size((W_LABEL, 22))
-            .text("База данных:").build(&mut self.lbl_database)?;
-        nwg::TextInput::builder().parent(p).position((X_INPUT, 100)).size((300, 24))
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 102))
+            .size((W_LABEL, 22))
+            .text("База данных:")
+            .build(&mut self.lbl_database)?;
+        nwg::TextInput::builder()
+            .parent(p)
+            .position((X_INPUT, 100))
+            .size((300, 24))
             .build(&mut self.in_database)?;
 
-        nwg::Label::builder().parent(p).position((10, 134)).size((W_LABEL, 22))
-            .text("Авторизация в ИБ:").build(&mut self.lbl_auth)?;
-        nwg::RadioButton::builder().parent(p).position((X_INPUT, 132)).size((150, 24))
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 134))
+            .size((W_LABEL, 22))
+            .text("Авторизация в ИБ:")
+            .build(&mut self.lbl_auth)?;
+        nwg::RadioButton::builder()
+            .parent(p)
+            .position((X_INPUT, 132))
+            .size((150, 24))
             .flags(nwg::RadioButtonFlags::VISIBLE | nwg::RadioButtonFlags::GROUP)
-            .text("Windows").build(&mut self.r_auth_os)?;
-        nwg::RadioButton::builder().parent(p).position((330, 132)).size((200, 24))
-            .text("1С (логин/пароль)").build(&mut self.r_auth_pwd)?;
+            .text("Windows")
+            .build(&mut self.r_auth_os)?;
+        nwg::RadioButton::builder()
+            .parent(p)
+            .position((330, 132))
+            .size((200, 24))
+            .text("1С (логин/пароль)")
+            .build(&mut self.r_auth_pwd)?;
 
-        nwg::Label::builder().parent(p).position((10, 166)).size((W_LABEL, 22))
-            .text("Логин:").build(&mut self.lbl_login)?;
-        nwg::TextInput::builder().parent(p).position((X_INPUT, 164)).size((300, 24))
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 166))
+            .size((W_LABEL, 22))
+            .text("Логин:")
+            .build(&mut self.lbl_login)?;
+        nwg::TextInput::builder()
+            .parent(p)
+            .position((X_INPUT, 164))
+            .size((300, 24))
             .build(&mut self.in_login)?;
 
-        nwg::Label::builder().parent(p).position((10, 196)).size((W_LABEL, 22))
-            .text("Пароль:").build(&mut self.lbl_password)?;
-        nwg::TextInput::builder().parent(p).position((X_INPUT, 194)).size((300, 24))
-            .password(Some('*')).build(&mut self.in_password)?;
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 196))
+            .size((W_LABEL, 22))
+            .text("Пароль:")
+            .build(&mut self.lbl_password)?;
+        nwg::TextInput::builder()
+            .parent(p)
+            .position((X_INPUT, 194))
+            .size((300, 24))
+            .password(Some('*'))
+            .build(&mut self.in_password)?;
 
-        nwg::Label::builder().parent(p).position((10, 228)).size((W_LABEL, 22))
-            .text("Путь к ibcmd.exe:").build(&mut self.lbl_ibcmd)?;
-        nwg::TextInput::builder().parent(p).position((X_INPUT, 226)).size((450, 24))
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 228))
+            .size((W_LABEL, 22))
+            .text("Путь к ibcmd.exe:")
+            .build(&mut self.lbl_ibcmd)?;
+        nwg::TextInput::builder()
+            .parent(p)
+            .position((X_INPUT, 226))
+            .size((450, 24))
             .build(&mut self.in_ibcmd)?;
-        nwg::Button::builder().parent(p).position((630, 224)).size((90, 28))
-            .text("Обзор...").build(&mut self.btn_ibcmd_browse)?;
+        nwg::Button::builder()
+            .parent(p)
+            .position((630, 224))
+            .size((90, 28))
+            .text("Обзор...")
+            .build(&mut self.btn_ibcmd_browse)?;
 
-        nwg::Label::builder().parent(p).position((10, 258)).size((W_LABEL, 22))
-            .text("Путь выгрузки:").build(&mut self.lbl_output)?;
-        nwg::TextInput::builder().parent(p).position((X_INPUT, 256)).size((450, 24))
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 258))
+            .size((W_LABEL, 22))
+            .text("Путь выгрузки:")
+            .build(&mut self.lbl_output)?;
+        nwg::TextInput::builder()
+            .parent(p)
+            .position((X_INPUT, 256))
+            .size((450, 24))
             .build(&mut self.in_output)?;
-        nwg::Button::builder().parent(p).position((630, 254)).size((90, 28))
-            .text("Обзор...").build(&mut self.btn_output_browse)?;
+        nwg::Button::builder()
+            .parent(p)
+            .position((630, 254))
+            .size((90, 28))
+            .text("Обзор...")
+            .build(&mut self.btn_output_browse)?;
 
-        nwg::Label::builder().parent(p).position((10, 288)).size((W_LABEL, 22))
-            .text("Git remote (origin):").build(&mut self.lbl_git_remote)?;
-        nwg::TextInput::builder().parent(p).position((X_INPUT, 286)).size((450, 24))
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 288))
+            .size((W_LABEL, 22))
+            .text("Git remote (origin):")
+            .build(&mut self.lbl_git_remote)?;
+        nwg::TextInput::builder()
+            .parent(p)
+            .position((X_INPUT, 286))
+            .size((450, 24))
             .build(&mut self.in_git_remote)?;
 
-        nwg::Button::builder().parent(p).position((10, 330)).size((200, 32))
-            .text("Сохранить настройки").build(&mut self.btn_save_cfg)?;
-        nwg::Button::builder().parent(p).position((220, 330)).size((200, 32))
-            .text("Сбросить по умолчанию").build(&mut self.btn_reset_cfg)?;
+        nwg::Button::builder()
+            .parent(p)
+            .position((10, 330))
+            .size((200, 32))
+            .text("Сохранить настройки")
+            .build(&mut self.btn_save_cfg)?;
+        nwg::Button::builder()
+            .parent(p)
+            .position((220, 330))
+            .size((200, 32))
+            .text("Сбросить по умолчанию")
+            .build(&mut self.btn_reset_cfg)?;
 
         nwg::Label::builder().parent(p).position((10, 376)).size((740, 60))
             .text("Путь выгрузки — это и есть git-репозиторий (для «Git commit && push»).\n\
@@ -440,60 +558,127 @@ impl App {
 
     fn build_tab_export(&mut self) -> Result<(), nwg::NwgError> {
         let p = &self.tab_export;
-        nwg::Label::builder().parent(p).position((10, 8)).size((300, 20))
-            .text("Что выгружать и как").build(&mut self.lbl_what)?;
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 8))
+            .size((300, 20))
+            .text("Что выгружать и как")
+            .build(&mut self.lbl_what)?;
         nwg::Label::builder().parent(p).position((10, 28)).size((750, 20))
             .text("«Инкрементально» — только изменённое с прошлой выгрузки. «Полностью» — папка операции очищается и выгружается заново.")
             .build(&mut self.lbl_mode_hint)?;
 
-        nwg::CheckBox::builder().parent(p).position((10, 54)).size((400, 22))
+        nwg::CheckBox::builder()
+            .parent(p)
+            .position((10, 54))
+            .size((400, 22))
             .text("Основная конфигурация  →  base/")
-            .check_state(nwg::CheckBoxState::Checked).build(&mut self.chk_base)?;
-        nwg::RadioButton::builder().parent(p).position((40, 78)).size((280, 22))
+            .check_state(nwg::CheckBoxState::Checked)
+            .build(&mut self.chk_base)?;
+        nwg::RadioButton::builder()
+            .parent(p)
+            .position((40, 78))
+            .size((280, 22))
             .flags(nwg::RadioButtonFlags::VISIBLE | nwg::RadioButtonFlags::GROUP)
-            .text("Инкрементально (--sync)").build(&mut self.r_base_inc)?;
-        nwg::RadioButton::builder().parent(p).position((340, 78)).size((330, 22))
-            .text("Полностью (перезапись base/)").build(&mut self.r_base_full)?;
+            .text("Инкрементально (--sync)")
+            .build(&mut self.r_base_inc)?;
+        nwg::RadioButton::builder()
+            .parent(p)
+            .position((340, 78))
+            .size((330, 22))
+            .text("Полностью (перезапись base/)")
+            .build(&mut self.r_base_full)?;
 
-        nwg::CheckBox::builder().parent(p).position((10, 106)).size((400, 22))
+        nwg::CheckBox::builder()
+            .parent(p)
+            .position((10, 106))
+            .size((400, 22))
             .text("Все расширения  →  extensions/")
-            .check_state(nwg::CheckBoxState::Checked).build(&mut self.chk_ext)?;
-        nwg::RadioButton::builder().parent(p).position((40, 130)).size((280, 22))
+            .check_state(nwg::CheckBoxState::Checked)
+            .build(&mut self.chk_ext)?;
+        nwg::RadioButton::builder()
+            .parent(p)
+            .position((40, 130))
+            .size((280, 22))
             .flags(nwg::RadioButtonFlags::VISIBLE | nwg::RadioButtonFlags::GROUP)
-            .text("Инкрементально (изменившиеся)").build(&mut self.r_ext_inc)?;
-        nwg::RadioButton::builder().parent(p).position((340, 130)).size((330, 22))
-            .text("Полностью (перезапись extensions/)").build(&mut self.r_ext_full)?;
+            .text("Инкрементально (изменившиеся)")
+            .build(&mut self.r_ext_inc)?;
+        nwg::RadioButton::builder()
+            .parent(p)
+            .position((340, 130))
+            .size((330, 22))
+            .text("Полностью (перезапись extensions/)")
+            .build(&mut self.r_ext_full)?;
 
-        nwg::CheckBox::builder().parent(p).position((10, 158)).size((520, 22))
+        nwg::CheckBox::builder()
+            .parent(p)
+            .position((10, 158))
+            .size((520, 22))
             .text("Доп. обработки (справочник БСП, из MSSQL)  →  External/")
             .build(&mut self.chk_proc)?;
-        nwg::RadioButton::builder().parent(p).position((40, 182)).size((280, 22))
+        nwg::RadioButton::builder()
+            .parent(p)
+            .position((40, 182))
+            .size((280, 22))
             .flags(nwg::RadioButtonFlags::VISIBLE | nwg::RadioButtonFlags::GROUP)
-            .text("Инкрементально (КонтрольнаяСумма)").build(&mut self.r_proc_inc)?;
-        nwg::RadioButton::builder().parent(p).position((340, 182)).size((330, 22))
-            .text("Полностью (перезапись External/)").build(&mut self.r_proc_full)?;
-        nwg::CheckBox::builder().parent(p).position((40, 206)).size((520, 22))
+            .text("Инкрементально (КонтрольнаяСумма)")
+            .build(&mut self.r_proc_inc)?;
+        nwg::RadioButton::builder()
+            .parent(p)
+            .position((340, 182))
+            .size((330, 22))
+            .text("Полностью (перезапись External/)")
+            .build(&mut self.r_proc_full)?;
+        nwg::CheckBox::builder()
+            .parent(p)
+            .position((40, 206))
+            .size((520, 22))
             .text("--rediscover: переразведка структуры хранения")
             .build(&mut self.chk_rediscover)?;
         // Правая колонка первой строки блока «что выгружать» — свободна:
         // chk_base занимает x 10..410, здесь начинаем с 420.
-        nwg::CheckBox::builder().parent(p).position((420, 54)).size((340, 22))
+        nwg::CheckBox::builder()
+            .parent(p)
+            .position((420, 54))
+            .size((340, 22))
             .text("Сохранять бинарные снимки .cf/.cfe (_artifacts/)")
             .build(&mut self.chk_artifacts)?;
 
-        nwg::Label::builder().parent(p).position((10, 238)).size((300, 20))
-            .text("Параметры IBCMD").build(&mut self.lbl_ibcmd_params)?;
-        nwg::Label::builder().parent(p).position((10, 262)).size((90, 22))
-            .text("Потоков:").build(&mut self.lbl_jobs)?;
-        nwg::TextInput::builder().parent(p).position((100, 260)).size((50, 24))
-            .text("8").build(&mut self.in_jobs)?;
-        nwg::CheckBox::builder().parent(p).position((190, 260)).size((450, 24))
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 238))
+            .size((300, 20))
+            .text("Параметры IBCMD")
+            .build(&mut self.lbl_ibcmd_params)?;
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 262))
+            .size((90, 22))
+            .text("Потоков:")
+            .build(&mut self.lbl_jobs)?;
+        nwg::TextInput::builder()
+            .parent(p)
+            .position((100, 260))
+            .size((50, 24))
+            .text("8")
+            .build(&mut self.in_jobs)?;
+        nwg::CheckBox::builder()
+            .parent(p)
+            .position((190, 260))
+            .size((450, 24))
             .text("Строка подключения (--ibconnection) — через кластер 1С")
             .build(&mut self.chk_ibconnection)?;
 
-        nwg::Label::builder().parent(p).position((10, 292)).size((80, 22))
-            .text("СУБД:").build(&mut self.lbl_dbms)?;
-        nwg::ComboBox::builder().parent(p).position((100, 290)).size((160, 26))
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 292))
+            .size((80, 22))
+            .text("СУБД:")
+            .build(&mut self.lbl_dbms)?;
+        nwg::ComboBox::builder()
+            .parent(p)
+            .position((100, 290))
+            .size((160, 26))
             .collection(vec![
                 "MSSQLServer".to_string(),
                 "PostgreSQL".to_string(),
@@ -502,71 +687,169 @@ impl App {
             ])
             .selected_index(Some(0))
             .build(&mut self.cmb_dbms)?;
-        nwg::RadioButton::builder().parent(p).position((290, 290)).size((230, 24))
+        nwg::RadioButton::builder()
+            .parent(p)
+            .position((290, 290))
+            .size((230, 24))
             .flags(nwg::RadioButtonFlags::VISIBLE | nwg::RadioButtonFlags::GROUP)
-            .text("Доменная (Windows)").build(&mut self.r_db_win)?;
-        nwg::RadioButton::builder().parent(p).position((530, 290)).size((200, 24))
-            .text("Логин+пароль SQL").build(&mut self.r_db_sql)?;
+            .text("Доменная (Windows)")
+            .build(&mut self.r_db_win)?;
+        nwg::RadioButton::builder()
+            .parent(p)
+            .position((530, 290))
+            .size((200, 24))
+            .text("Логин+пароль SQL")
+            .build(&mut self.r_db_sql)?;
 
-        nwg::Label::builder().parent(p).position((10, 322)).size((150, 22))
-            .text("Пользователь БД:").build(&mut self.lbl_db_user)?;
-        nwg::TextInput::builder().parent(p).position((170, 320)).size((180, 24))
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 322))
+            .size((150, 22))
+            .text("Пользователь БД:")
+            .build(&mut self.lbl_db_user)?;
+        nwg::TextInput::builder()
+            .parent(p)
+            .position((170, 320))
+            .size((180, 24))
             .build(&mut self.in_db_user)?;
-        nwg::Label::builder().parent(p).position((370, 322)).size((90, 22))
-            .text("Пароль БД:").build(&mut self.lbl_db_pwd)?;
-        nwg::TextInput::builder().parent(p).position((470, 320)).size((180, 24))
-            .password(Some('*')).build(&mut self.in_db_pwd)?;
+        nwg::Label::builder()
+            .parent(p)
+            .position((370, 322))
+            .size((90, 22))
+            .text("Пароль БД:")
+            .build(&mut self.lbl_db_pwd)?;
+        nwg::TextInput::builder()
+            .parent(p)
+            .position((470, 320))
+            .size((180, 24))
+            .password(Some('*'))
+            .build(&mut self.in_db_pwd)?;
 
-        nwg::Label::builder().parent(p).position((10, 356)).size((100, 22))
-            .text("Git:").build(&mut self.lbl_git)?;
-        nwg::RadioButton::builder().parent(p).position((100, 354)).size((260, 24))
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 356))
+            .size((100, 22))
+            .text("Git:")
+            .build(&mut self.lbl_git)?;
+        nwg::RadioButton::builder()
+            .parent(p)
+            .position((100, 354))
+            .size((260, 24))
             .flags(nwg::RadioButtonFlags::VISIBLE | nwg::RadioButtonFlags::GROUP)
-            .text("Доменная (credentials)").build(&mut self.r_git_domain)?;
-        nwg::RadioButton::builder().parent(p).position((380, 354)).size((130, 24))
-            .text("Логин+пароль").build(&mut self.r_git_pwd)?;
+            .text("Доменная (credentials)")
+            .build(&mut self.r_git_domain)?;
+        nwg::RadioButton::builder()
+            .parent(p)
+            .position((380, 354))
+            .size((130, 24))
+            .text("Логин+пароль")
+            .build(&mut self.r_git_pwd)?;
         // Правая часть строки «Git:» — концы строк (core.autocrlf).
         // Ширина панели вкладки ~770, поэтому радиокнопка «Логин+пароль»
         // сужена до 130 (её текст короче), а список занимает 620..760.
-        nwg::Label::builder().parent(p).position((520, 356)).size((95, 22))
-            .text("Концы строк:").build(&mut self.lbl_git_autocrlf)?;
-        nwg::ComboBox::builder().parent(p).position((620, 354)).size((140, 26))
-            .collection(AUTOCRLF_ITEMS.iter().map(|s| s.to_string()).collect::<Vec<String>>())
+        nwg::Label::builder()
+            .parent(p)
+            .position((520, 356))
+            .size((95, 22))
+            .text("Концы строк:")
+            .build(&mut self.lbl_git_autocrlf)?;
+        nwg::ComboBox::builder()
+            .parent(p)
+            .position((620, 354))
+            .size((140, 26))
+            .collection(
+                AUTOCRLF_ITEMS
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>(),
+            )
             .selected_index(Some(0))
             .build(&mut self.cmb_git_autocrlf)?;
-        nwg::Label::builder().parent(p).position((10, 386)).size((150, 22))
-            .text("Логин git:").build(&mut self.lbl_git_user)?;
-        nwg::TextInput::builder().parent(p).position((170, 384)).size((180, 24))
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 386))
+            .size((150, 22))
+            .text("Логин git:")
+            .build(&mut self.lbl_git_user)?;
+        nwg::TextInput::builder()
+            .parent(p)
+            .position((170, 384))
+            .size((180, 24))
             .build(&mut self.in_git_user)?;
-        nwg::Label::builder().parent(p).position((370, 386)).size((90, 22))
-            .text("Пароль git:").build(&mut self.lbl_git_pwd)?;
-        nwg::TextInput::builder().parent(p).position((470, 384)).size((180, 24))
-            .password(Some('*')).build(&mut self.in_git_pwd)?;
+        nwg::Label::builder()
+            .parent(p)
+            .position((370, 386))
+            .size((90, 22))
+            .text("Пароль git:")
+            .build(&mut self.lbl_git_pwd)?;
+        nwg::TextInput::builder()
+            .parent(p)
+            .position((470, 384))
+            .size((180, 24))
+            .password(Some('*'))
+            .build(&mut self.in_git_pwd)?;
 
-        nwg::Button::builder().parent(p).position((10, 428)).size((210, 36))
-            .text("▶  Начать выгрузку").build(&mut self.btn_start)?;
-        nwg::Button::builder().parent(p).position((230, 428)).size((140, 36))
-            .text("Остановить").build(&mut self.btn_stop)?;
+        nwg::Button::builder()
+            .parent(p)
+            .position((10, 428))
+            .size((210, 36))
+            .text("▶  Начать выгрузку")
+            .build(&mut self.btn_start)?;
+        nwg::Button::builder()
+            .parent(p)
+            .position((230, 428))
+            .size((140, 36))
+            .text("Остановить")
+            .build(&mut self.btn_stop)?;
 
-        nwg::Button::builder().parent(p).position((10, 476)).size((210, 32))
-            .text("Git commit && push").build(&mut self.btn_push)?;
-        nwg::CheckBox::builder().parent(p).position((230, 480)).size((290, 24))
-            .text("Пушить принудительно (с ошибками)").build(&mut self.chk_force_push)?;
+        nwg::Button::builder()
+            .parent(p)
+            .position((10, 476))
+            .size((210, 32))
+            .text("Git commit && push")
+            .build(&mut self.btn_push)?;
+        nwg::CheckBox::builder()
+            .parent(p)
+            .position((230, 480))
+            .size((290, 24))
+            .text("Пушить принудительно (с ошибками)")
+            .build(&mut self.chk_force_push)?;
 
-        nwg::Label::builder().parent(p).position((10, 520)).size((750, 60))
-            .text("Push доступен после успешной выгрузки.\n\
-                   Ход выполнения — на вкладке «Лог», итоги — на вкладке «История».")
+        nwg::Label::builder()
+            .parent(p)
+            .position((10, 520))
+            .size((750, 60))
+            .text(
+                "Push доступен после успешной выгрузки.\n\
+                   Ход выполнения — на вкладке «Лог», итоги — на вкладке «История».",
+            )
             .build(&mut self.lbl_push_hint)?;
         Ok(())
     }
 
     fn build_tab_log(&mut self) -> Result<(), nwg::NwgError> {
         let p = &self.tab_log;
-        nwg::Button::builder().parent(p).position((10, 10)).size((170, 30))
-            .text("Копировать лог").build(&mut self.btn_log_copy)?;
-        nwg::Button::builder().parent(p).position((190, 10)).size((170, 30))
-            .text("Очистить лог").build(&mut self.btn_log_clear)?;
-        nwg::TextBox::builder().parent(p).position((10, 50)).size((750, 580))
-            .flags(nwg::TextBoxFlags::VISIBLE | nwg::TextBoxFlags::VSCROLL | nwg::TextBoxFlags::AUTOVSCROLL)
+        nwg::Button::builder()
+            .parent(p)
+            .position((10, 10))
+            .size((170, 30))
+            .text("Копировать лог")
+            .build(&mut self.btn_log_copy)?;
+        nwg::Button::builder()
+            .parent(p)
+            .position((190, 10))
+            .size((170, 30))
+            .text("Очистить лог")
+            .build(&mut self.btn_log_clear)?;
+        nwg::TextBox::builder()
+            .parent(p)
+            .position((10, 50))
+            .size((750, 580))
+            .flags(
+                nwg::TextBoxFlags::VISIBLE
+                    | nwg::TextBoxFlags::VSCROLL
+                    | nwg::TextBoxFlags::AUTOVSCROLL,
+            )
             .readonly(true)
             .build(&mut self.tb_log)?;
         Ok(())
@@ -574,11 +857,22 @@ impl App {
 
     fn build_tab_history(&mut self) -> Result<(), nwg::NwgError> {
         let p = &self.tab_history;
-        nwg::Button::builder().parent(p).position((10, 10)).size((140, 30))
-            .text("⟳ Обновить").build(&mut self.btn_hist_refresh)?;
-        nwg::Label::builder().parent(p).position((170, 14)).size((400, 22))
-            .text("записей: 0").build(&mut self.lbl_hist_count)?;
-        nwg::ListView::builder().parent(p).position((10, 50)).size((750, 580))
+        nwg::Button::builder()
+            .parent(p)
+            .position((10, 10))
+            .size((140, 30))
+            .text("⟳ Обновить")
+            .build(&mut self.btn_hist_refresh)?;
+        nwg::Label::builder()
+            .parent(p)
+            .position((170, 14))
+            .size((400, 22))
+            .text("записей: 0")
+            .build(&mut self.lbl_hist_count)?;
+        nwg::ListView::builder()
+            .parent(p)
+            .position((10, 50))
+            .size((750, 580))
             .list_style(nwg::ListViewStyle::Detailed)
             // Выделение всей строки: иначе подсвечивается только первая колонка,
             // а клик по остальным колонкам не даёт номера строки.
@@ -608,14 +902,29 @@ impl App {
             .position((320, 200))
             .title("Подробности записи журнала")
             .build(&mut self.wnd_detail)?;
-        nwg::TextBox::builder().parent(&self.wnd_detail).position((10, 10)).size((735, 400))
-            .flags(nwg::TextBoxFlags::VISIBLE | nwg::TextBoxFlags::VSCROLL | nwg::TextBoxFlags::AUTOVSCROLL)
+        nwg::TextBox::builder()
+            .parent(&self.wnd_detail)
+            .position((10, 10))
+            .size((735, 400))
+            .flags(
+                nwg::TextBoxFlags::VISIBLE
+                    | nwg::TextBoxFlags::VSCROLL
+                    | nwg::TextBoxFlags::AUTOVSCROLL,
+            )
             .readonly(true)
             .build(&mut self.tb_detail)?;
-        nwg::Button::builder().parent(&self.wnd_detail).position((10, 420)).size((190, 32))
-            .text("Копировать текст").build(&mut self.btn_detail_copy)?;
-        nwg::Button::builder().parent(&self.wnd_detail).position((210, 420)).size((130, 32))
-            .text("Закрыть").build(&mut self.btn_detail_close)?;
+        nwg::Button::builder()
+            .parent(&self.wnd_detail)
+            .position((10, 420))
+            .size((190, 32))
+            .text("Копировать текст")
+            .build(&mut self.btn_detail_copy)?;
+        nwg::Button::builder()
+            .parent(&self.wnd_detail)
+            .position((210, 420))
+            .size((130, 32))
+            .text("Закрыть")
+            .build(&mut self.btn_detail_close)?;
         Ok(())
     }
 
@@ -630,7 +939,8 @@ impl App {
             return;
         }
         self.lbl_base_src.set_size(w.saturating_sub(300), 22);
-        self.tabs.set_size(w.saturating_sub(10), h.saturating_sub(40 + STATUS_H));
+        self.tabs
+            .set_size(w.saturating_sub(10), h.saturating_sub(40 + STATUS_H));
 
         // Панели вкладок ресайзит сам TabsContainer (WM_SIZE-хук nwg): рамка по
         // бокам и полоса с заголовками сверху. Своего size() у Tab нет, поэтому
@@ -640,12 +950,17 @@ impl App {
         let inner_h = ch.saturating_sub(TAB_CHROME_H + 60);
         self.lv_history.set_size(inner_w, inner_h);
         self.tb_log.set_size(inner_w, inner_h);
-        self.lbl_hist_count.set_size(inner_w.saturating_sub(170), 22);
+        self.lbl_hist_count
+            .set_size(inner_w.saturating_sub(170), 22);
 
         // Последняя колонка таблицы забирает остаток ширины (минус полоса прокрутки).
-        let fixed: i32 = HIST_COLS[..HIST_COLS.len() - 1].iter().map(|(_, w)| *w).sum();
+        let fixed: i32 = HIST_COLS[..HIST_COLS.len() - 1]
+            .iter()
+            .map(|(_, w)| *w)
+            .sum();
         let rest = (inner_w as i32 - fixed - 24).max(HIST_COLS[HIST_COLS.len() - 1].1);
-        self.lv_history.set_column_width(HIST_COLS.len() - 1, rest as isize);
+        self.lv_history
+            .set_column_width(HIST_COLS.len() - 1, rest as isize);
     }
 
     /// То же для окна подробностей: текстовое поле во всю площадь, кнопки снизу.
@@ -654,7 +969,8 @@ impl App {
         if w < 200 || h < 150 {
             return;
         }
-        self.tb_detail.set_size(w.saturating_sub(25), h.saturating_sub(70));
+        self.tb_detail
+            .set_size(w.saturating_sub(25), h.saturating_sub(70));
         let btn_y = (h as i32) - 50;
         self.btn_detail_copy.set_position(10, btn_y);
         self.btn_detail_close.set_position(210, btn_y);
@@ -680,8 +996,12 @@ impl App {
             row.finished_at,
             row.repo,
             row.status,
-            row.duration_sec.map(|d| format!("{} с", d)).unwrap_or_else(|| "—".to_string()),
-            row.events.map(|e| e.to_string()).unwrap_or_else(|| "—".to_string()),
+            row.duration_sec
+                .map(|d| format!("{} с", d))
+                .unwrap_or_else(|| "—".to_string()),
+            row.events
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "—".to_string()),
             crlf(row.details.as_deref().unwrap_or("—")),
             crlf(row.error.as_deref().unwrap_or("—")),
         );
@@ -815,7 +1135,8 @@ impl App {
             Logger::log("GUI: реестр баз пуст — режим одиночной базы (config.json)");
             self.lbl_base_src
                 .set_text("bases.json не найден — режим одиночной базы (config.json)");
-            self.status.set_text(0, "Готово (bases.json не найден — режим одиночной базы)");
+            self.status
+                .set_text(0, "Готово (bases.json не найден — режим одиночной базы)");
         } else {
             Logger::log(&format!(
                 "GUI: реестр баз ({} шт.): {}",
@@ -863,7 +1184,9 @@ impl App {
 
     /// Залить настройки выбранной базы в поля формы.
     fn apply_base_by_index(&self, idx: usize) {
-        let Some(b) = self.state.borrow().bases.get(idx).cloned() else { return };
+        let Some(b) = self.state.borrow().bases.get(idx).cloned() else {
+            return;
+        };
 
         self.in_server.set_text(&b.sql_server);
         self.in_server1c.set_text(&b.server_1c);
@@ -879,13 +1202,19 @@ impl App {
 
         self.chk_base.set_check_state(bool_chk(b.export_base));
         self.chk_ext.set_check_state(bool_chk(b.export_extensions));
-        self.chk_proc.set_check_state(bool_chk(b.export_processings));
+        self.chk_proc
+            .set_check_state(bool_chk(b.export_processings));
         self.chk_rediscover.set_check_state(bool_chk(false));
-        self.chk_artifacts.set_check_state(bool_chk(b.save_artifacts));
+        self.chk_artifacts
+            .set_check_state(bool_chk(b.save_artifacts));
 
         self.set_radio_pair(&self.r_base_inc, &self.r_base_full, b.ibcmd_sync);
         self.set_radio_pair(&self.r_ext_inc, &self.r_ext_full, b.ibcmd_incremental);
-        self.set_radio_pair(&self.r_proc_inc, &self.r_proc_full, b.processings_incremental);
+        self.set_radio_pair(
+            &self.r_proc_inc,
+            &self.r_proc_full,
+            b.processings_incremental,
+        );
         self.set_radio_pair(&self.r_db_win, &self.r_db_sql, b.ibcmd_db_auth_windows);
         self.in_db_user.set_text(b.db_user.as_deref().unwrap_or(""));
         self.in_db_pwd.set_text(b.db_pwd.as_deref().unwrap_or(""));
@@ -894,9 +1223,15 @@ impl App {
         }
         self.chk_ibconnection.set_check_state(bool_chk(false));
 
-        self.set_radio_pair(&self.r_git_domain, &self.r_git_pwd, b.git_auth_type == "domain");
-        self.in_git_user.set_text(b.git_user.as_deref().unwrap_or(""));
-        self.in_git_pwd.set_text(b.git_password.as_deref().unwrap_or(""));
+        self.set_radio_pair(
+            &self.r_git_domain,
+            &self.r_git_pwd,
+            b.git_auth_type == "domain",
+        );
+        self.in_git_user
+            .set_text(b.git_user.as_deref().unwrap_or(""));
+        self.in_git_pwd
+            .set_text(b.git_password.as_deref().unwrap_or(""));
         self.cmb_git_autocrlf
             .set_selection(Some(autocrlf_to_index(&b.git_autocrlf)));
         self.chk_force_push.set_check_state(bool_chk(false));
@@ -916,7 +1251,8 @@ impl App {
         // Push недоступен до первой выгрузки на новой базе
         self.last_export_had_ops.store(false, Ordering::Relaxed);
         self.last_export_all_ok.store(false, Ordering::Relaxed);
-        self.status.set_text(0, &format!("Выбрана база: {}", b.alias));
+        self.status
+            .set_text(0, &format!("Выбрана база: {}", b.alias));
     }
 
     // ── Сбор конфигурации из полей ──────────────────────────────────────────
@@ -957,10 +1293,16 @@ impl App {
         let _ = std::fs::create_dir_all("config");
         match serde_json::to_string_pretty(&config) {
             Ok(json) => match std::fs::write(&config_path, json) {
-                Ok(_) => self.status.set_text(0, "Настройки сохранены в config/config.json"),
-                Err(e) => self.status.set_text(0, &format!("Ошибка сохранения: {}", e)),
+                Ok(_) => self
+                    .status
+                    .set_text(0, "Настройки сохранены в config/config.json"),
+                Err(e) => self
+                    .status
+                    .set_text(0, &format!("Ошибка сохранения: {}", e)),
             },
-            Err(e) => self.status.set_text(0, &format!("Ошибка сериализации: {}", e)),
+            Err(e) => self
+                .status
+                .set_text(0, &format!("Ошибка сериализации: {}", e)),
         }
         // Настройки выбранной базы пишем в bases.json (если реестр загружен).
         self.persist_base_to_bases();
@@ -972,10 +1314,14 @@ impl App {
     /// В режиме одиночной базы (bases.json не найден) — тихо пропускаем: origin
     /// в этом случае живёт в config.json (build_config его уже сохранил).
     fn persist_base_to_bases(&self) {
-        let Some(idx) = self.cmb_base.selection() else { return };
+        let Some(idx) = self.cmb_base.selection() else {
+            return;
+        };
         let (path, alias) = {
             let st = self.state.borrow();
-            let Some(path) = st.bases_path.clone() else { return };
+            let Some(path) = st.bases_path.clone() else {
+                return;
+            };
             let Some(b) = st.bases.get(idx) else { return };
             (path, b.alias.clone())
         };
@@ -983,11 +1329,14 @@ impl App {
         let mut cfg = match DaemonConfig::load(&path) {
             Ok(c) => c,
             Err(e) => {
-                self.status.set_text(0, &format!("bases.json не перечитан: {}", e));
+                self.status
+                    .set_text(0, &format!("bases.json не перечитан: {}", e));
                 return;
             }
         };
-        let Some(entry) = cfg.bases.iter_mut().find(|b| b.alias == alias) else { return };
+        let Some(entry) = cfg.bases.iter_mut().find(|b| b.alias == alias) else {
+            return;
+        };
         self.fill_base_from_form(entry);
         let updated = entry.clone();
         match serde_json::to_string_pretty(&cfg) {
@@ -1009,9 +1358,13 @@ impl App {
                         &format!("Настройки базы '{}' записаны в {}", alias, path.display()),
                     );
                 }
-                Err(e) => self.status.set_text(0, &format!("bases.json не записан: {}", e)),
+                Err(e) => self
+                    .status
+                    .set_text(0, &format!("bases.json не записан: {}", e)),
             },
-            Err(e) => self.status.set_text(0, &format!("bases.json сериализация: {}", e)),
+            Err(e) => self
+                .status
+                .set_text(0, &format!("bases.json сериализация: {}", e)),
         }
     }
 
@@ -1053,8 +1406,13 @@ impl App {
 
     fn reset_config(&self) {
         for input in [
-            &self.in_server, &self.in_server1c, &self.in_database,
-            &self.in_login, &self.in_password, &self.in_ibcmd, &self.in_output,
+            &self.in_server,
+            &self.in_server1c,
+            &self.in_database,
+            &self.in_login,
+            &self.in_password,
+            &self.in_ibcmd,
+            &self.in_output,
             &self.in_git_remote,
         ] {
             input.set_text("");
@@ -1066,8 +1424,7 @@ impl App {
     // ── Фоновые операции (та же логика, что в прежнем GUI) ──────────────────
 
     fn is_busy(&self) -> bool {
-        self.is_exporting.load(Ordering::Relaxed)
-            || self.is_pushing.load(Ordering::Relaxed)
+        self.is_exporting.load(Ordering::Relaxed) || self.is_pushing.load(Ordering::Relaxed)
     }
 
     fn start_export(&self) {
@@ -1096,10 +1453,25 @@ impl App {
 
         let ibcmd_params = IbcmdParams {
             ibcmd_path,
-            dbms: self.cmb_dbms.selection_string().unwrap_or_else(|| "MSSQLServer".to_string()),
-            db_auth: if db_windows { IbcmdDbAuth::Windows } else { IbcmdDbAuth::SqlLogin },
-            db_user: if db_user.is_empty() { None } else { Some(db_user) },
-            db_pwd: if db_pwd.is_empty() { None } else { Some(db_pwd) },
+            dbms: self
+                .cmb_dbms
+                .selection_string()
+                .unwrap_or_else(|| "MSSQLServer".to_string()),
+            db_auth: if db_windows {
+                IbcmdDbAuth::Windows
+            } else {
+                IbcmdDbAuth::SqlLogin
+            },
+            db_user: if db_user.is_empty() {
+                None
+            } else {
+                Some(db_user)
+            },
+            db_pwd: if db_pwd.is_empty() {
+                None
+            } else {
+                Some(db_pwd)
+            },
             use_connection_string: self.checked(&self.chk_ibconnection),
             jobs,
             sync,
@@ -1238,7 +1610,10 @@ impl App {
             Logger::set_sender(tx);
             // git init при необходимости + прописать/обновить origin из поля настроек.
             if let Err(e) = git_push::ensure_repo_and_remote(&repo, &remote_url, &git_opts) {
-                Logger::log(&format!("=== GIT: ОШИБКА подготовки репозитория — {} ===", e));
+                Logger::log(&format!(
+                    "=== GIT: ОШИБКА подготовки репозитория — {} ===",
+                    e
+                ));
                 Logger::clear_sender();
                 is_pushing.store(false, Ordering::Relaxed);
                 return;
@@ -1307,8 +1682,7 @@ impl App {
                     }
                     self.state.borrow_mut().history_rows = rows;
                 }
-                Err(e) => self
-                    .append_log_line(&format!("[история] ошибка чтения state.db: {}", e)),
+                Err(e) => self.append_log_line(&format!("[история] ошибка чтения state.db: {}", e)),
             },
             Err(e) => self.append_log_line(&format!("[история] state.db не открылась: {}", e)),
         }
@@ -1483,7 +1857,7 @@ impl App {
             self.reload_history();
         } else if handle == self.btn_log_copy {
             let text = self.state.borrow().log_text.clone();
-            let _ = nwg::Clipboard::set_data_text(&self.window, &text);
+            nwg::Clipboard::set_data_text(&self.window, &text);
             self.status.set_text(0, "Лог скопирован в буфер обмена");
         } else if handle == self.btn_log_clear {
             self.state.borrow_mut().log_text.clear();
@@ -1496,14 +1870,12 @@ impl App {
             }
         } else if handle == self.btn_detail_copy {
             let text = self.tb_detail.text();
-            let _ = nwg::Clipboard::set_data_text(&self.wnd_detail, &text);
+            nwg::Clipboard::set_data_text(&self.wnd_detail, &text);
         } else if handle == self.btn_detail_close {
             self.wnd_detail.set_visible(false);
-        } else if handle == self.btn_output_browse {
-            if self.dlg_dir.run(Some(&self.window)) {
-                if let Ok(item) = self.dlg_dir.get_selected_item() {
-                    self.in_output.set_text(&item.to_string_lossy());
-                }
+        } else if handle == self.btn_output_browse && self.dlg_dir.run(Some(&self.window)) {
+            if let Ok(item) = self.dlg_dir.get_selected_item() {
+                self.in_output.set_text(&item.to_string_lossy());
             }
         }
     }
@@ -1550,32 +1922,6 @@ fn autocrlf_from_index(idx: usize) -> String {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn autocrlf_index_roundtrip() {
-        for (idx, value) in ["false", "true", "input", ""].iter().enumerate() {
-            assert_eq!(autocrlf_to_index(value), idx);
-            assert_eq!(autocrlf_from_index(idx), *value);
-        }
-    }
-
-    #[test]
-    fn autocrlf_unknown_value_and_index_fall_back_to_false() {
-        assert_eq!(autocrlf_to_index("CRLF"), 0);
-        assert_eq!(autocrlf_to_index("  input  "), 2);
-        assert_eq!(autocrlf_from_index(99), "false");
-    }
-
-    #[test]
-    fn autocrlf_items_match_indexes() {
-        assert_eq!(AUTOCRLF_ITEMS.len(), 4);
-        assert_eq!(AUTOCRLF_ITEMS[3], "как на машине");
-    }
-}
-
 // ── Точка входа GUI ──────────────────────────────────────────────────────────
 
 pub fn run_gui() {
@@ -1608,7 +1954,10 @@ pub fn run_gui() {
         // Диалог вместо тихого выхода: exe собран без консоли.
         nwg::error_message(
             "1c-export: не удалось запустить GUI",
-            &format!("Ошибка: {}\n\nCLI-режим работает независимо: 1c-export.exe --help", e),
+            &format!(
+                "Ошибка: {}\n\nCLI-режим работает независимо: 1c-export.exe --help",
+                e
+            ),
         );
     }
 }
@@ -1652,4 +2001,30 @@ fn run_gui_inner() -> Result<(), nwg::NwgError> {
     nwg::unbind_event_handler(&handler_detail);
     nwg::unbind_event_handler(&handler);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn autocrlf_index_roundtrip() {
+        for (idx, value) in ["false", "true", "input", ""].iter().enumerate() {
+            assert_eq!(autocrlf_to_index(value), idx);
+            assert_eq!(autocrlf_from_index(idx), *value);
+        }
+    }
+
+    #[test]
+    fn autocrlf_unknown_value_and_index_fall_back_to_false() {
+        assert_eq!(autocrlf_to_index("CRLF"), 0);
+        assert_eq!(autocrlf_to_index("  input  "), 2);
+        assert_eq!(autocrlf_from_index(99), "false");
+    }
+
+    #[test]
+    fn autocrlf_items_match_indexes() {
+        assert_eq!(AUTOCRLF_ITEMS.len(), 4);
+        assert_eq!(AUTOCRLF_ITEMS[3], "как на машине");
+    }
 }

@@ -44,8 +44,8 @@ static LOG_LEVEL: AtomicU8 = AtomicU8::new(0);
 /// открытия. При смене даты файл переоткрывается на новый — ежедневная ротация.
 struct FileLogState {
     dir: PathBuf,
-    prefix: String,         // "watch", "gui", ...
-    current_date: String,   // "YYYY-MM-DD"
+    prefix: String,       // "watch", "gui", ...
+    current_date: String, // "YYYY-MM-DD"
     file: File,
 }
 
@@ -98,7 +98,11 @@ impl Logger {
     /// без файла (stdout/GUI-канал продолжают работать).
     pub fn init_file_named(dir: PathBuf, prefix: &str) {
         if let Err(e) = std::fs::create_dir_all(&dir) {
-            eprintln!("Logger: не удалось создать каталог логов {}: {}", dir.display(), e);
+            eprintln!(
+                "Logger: не удалось создать каталог логов {}: {}",
+                dir.display(),
+                e
+            );
             return;
         }
         let date = Local::now().format("%Y-%m-%d").to_string();
@@ -181,11 +185,6 @@ impl Logger {
     pub fn separator() {
         Self::log(&"=".repeat(60));
     }
-
-    /// Вывод тонкого разделителя
-    pub fn thin_separator() {
-        Self::log(&"-".repeat(60));
-    }
 }
 
 #[cfg(test)]
@@ -223,9 +222,21 @@ mod tests {
         let date = Local::now().format("%Y-%m-%d").to_string();
         let path = log_dir.join(format!("gui-test-{}.log", date));
         let content = std::fs::read_to_string(&path).expect("файл лога должен существовать");
-        assert!(content.contains("проверка записи в файл"), "содержимое: {}", content);
-        assert!(!content.contains("подробность при info"), "содержимое: {}", content);
-        assert!(content.contains("подробность при debug"), "содержимое: {}", content);
+        assert!(
+            content.contains("проверка записи в файл"),
+            "содержимое: {}",
+            content
+        );
+        assert!(
+            !content.contains("подробность при info"),
+            "содержимое: {}",
+            content
+        );
+        assert!(
+            content.contains("подробность при debug"),
+            "содержимое: {}",
+            content
+        );
 
         // Вернуть глобальное состояние: иначе остальные тесты продолжат писать
         // во временный каталог и на уровне debug.
