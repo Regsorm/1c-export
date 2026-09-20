@@ -238,10 +238,8 @@ fn walk(node: &V8Value, out: &mut Vec<String>) {
                 walk(it, out);
             }
         }
-        V8Value::Str(s) => {
-            if looks_like_bsl(s) {
-                out.push(s.clone());
-            }
+        V8Value::Str(s) if looks_like_bsl(s) => {
+            out.push(s.clone());
         }
         _ => {}
     }

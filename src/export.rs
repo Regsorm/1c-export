@@ -910,10 +910,8 @@ impl ExportCoordinator {
                         current_name = Some(value);
                     }
                 }
-                "hash-sum" | "hash" | "контрольная-сумма" => {
-                    if !value.is_empty() {
-                        current_hash = Some(value);
-                    }
+                "hash-sum" | "hash" | "контрольная-сумма" if !value.is_empty() => {
+                    current_hash = Some(value);
                 }
                 _ => {}
             }

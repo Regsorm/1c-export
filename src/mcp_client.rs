@@ -98,7 +98,7 @@ impl McpClient {
                 "MCP tools/call '{}' не JSON: {}\nraw[:500]={}",
                 name,
                 e,
-                &raw.chars().take(500).collect::<String>()
+                raw.chars().take(500).collect::<String>()
             )
         })?;
 

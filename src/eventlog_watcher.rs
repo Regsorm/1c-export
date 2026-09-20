@@ -110,7 +110,7 @@ pub async fn query_new_events(
         anyhow::anyhow!(
             "eventlog_query возврат не JSON: {}\nbody[:500]={}",
             e,
-            &resp_text.chars().take(500).collect::<String>()
+            resp_text.chars().take(500).collect::<String>()
         )
     })?;
     let items = parsed
