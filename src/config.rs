@@ -68,6 +68,12 @@ pub struct AppConfig {
         alias = "processings_meta_name"
     )]
     pub processings_meta_name: String,
+    /// Путь к JSON-файлу с дополнительными именами событий форм для раскладки в
+    /// формат Конфигуратора (`{"<uuid события>": "ИмяСобытия"}`). Пусто — файл
+    /// `form-events.json` рядом с исполняемым файлом; файла нет — встроенная
+    /// таблица (`form_events::BUILTIN_FORM_EVENTS`).
+    #[serde(default, rename = "formEventsPath", alias = "form_events_path")]
+    pub form_events_path: String,
     /// URL удалённого git-репозитория (origin) для «Git commit & push» из GUI.
     /// Пусто — origin должен быть настроен в репозитории выгрузки заранее.
     #[serde(default, rename = "gitRemoteUrl", alias = "git_remote_url")]
@@ -128,6 +134,8 @@ impl AppConfig {
             // processings_meta_name теперь глобальный (DaemonConfig) — резолвим в watch.rs
             // при вызове fetch_storage_mapping. Здесь оставляем пустым.
             processings_meta_name: String::new(),
+            // Путь к таблице событий форм — файл рядом с exe (см. form_events).
+            form_events_path: String::new(),
             // origin per-base хранится в bases.json (BaseEntry.git_remote_url).
             git_remote_url: b.git_remote_url.clone(),
             git_autocrlf: b.git_autocrlf.clone(),

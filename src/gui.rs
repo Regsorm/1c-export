@@ -110,6 +110,9 @@ struct AppState {
     mcp_url: String,
     mcp_api_key: String,
     processings_meta_name: String,
+    /// Путь к таблице событий форм для раскладки в формат Конфигуратора.
+    /// На форме не редактируется — задаётся в config.json (поле formEventsPath).
+    form_events_path: String,
 
     /// Полный текст лога (TextBox перерисовывается целиком при добавлении).
     log_text: String,
@@ -267,6 +270,7 @@ impl Default for AppState {
             mcp_url: String::new(),
             mcp_api_key: String::new(),
             processings_meta_name: "Справочник.ДополнительныеОтчетыИОбработки".to_string(),
+            form_events_path: String::new(),
             log_text: String::new(),
             log_receiver: None,
             was_busy: false,
@@ -1037,6 +1041,7 @@ impl App {
             mcp_url: String::new(),
             mcp_api_key: String::new(),
             processings_meta_name: String::new(),
+            form_events_path: String::new(),
             git_remote_url: String::new(),
             git_autocrlf: "false".to_string(),
             output_path: String::new(),
@@ -1074,6 +1079,9 @@ impl App {
             if !config.processings_meta_name.is_empty() {
                 st.processings_meta_name = config.processings_meta_name.clone();
             }
+            // Путь к таблице событий форм — как задан в config.json (пусто —
+            // файл рядом с exe, см. form_events::resolve_path).
+            st.form_events_path = config.form_events_path.clone();
         }
 
         // bases.json
@@ -1277,6 +1285,7 @@ impl App {
             mcp_url: st.mcp_url.clone(),
             mcp_api_key: st.mcp_api_key.clone(),
             processings_meta_name: st.processings_meta_name.clone(),
+            form_events_path: st.form_events_path.clone(),
             git_remote_url: self.in_git_remote.text(),
             git_autocrlf: self.selected_autocrlf(),
             output_path: self.in_output.text(),

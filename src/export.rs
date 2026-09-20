@@ -1287,6 +1287,11 @@ impl ExportCoordinator {
         let processings_dir = output_dir.join("processings");
         let src_root = output_dir.join("processings_src");
 
+        // Таблица имён событий форм (config.json → `formEventsPath`) — читается
+        // один раз на выгрузку, воркеры берут её по ссылке. Журнал по файлу
+        // пишется здесь же, а не в каждом воркере.
+        let form_events = crate::form_events::FormEventTable::load(&self.config.form_events_path);
+
         // Утилита: путь в виде с прямыми слэшами (для логов).
         fn p(path: &Path) -> String {
             path.display().to_string().replace('\\', "/")
@@ -1391,6 +1396,12 @@ impl ExportCoordinator {
                                     total,
                                     name
                                 ));
+                                // Дополнительная раскладка в формат Конфигуратора:
+                                // Configuration.xml, паспорта объекта/макетов/форм и
+                                // Ext-файлы. Неудачи генератора идут только
+                                // предупреждениями в журнал — разбор объекта они не
+                                // отменяют.
+                                crate::mdxml::write_configurator_layout(&target, &form_events);
                                 if let Err(e) = std::fs::remove_file(&initial_path) {
                                     Logger::log(&format!(
                                         "  ⚠ не удалось удалить {}: {}",

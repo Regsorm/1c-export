@@ -221,6 +221,7 @@ mod tests {
             mcp_url: String::new(),
             mcp_api_key: String::new(),
             processings_meta_name: String::new(),
+            form_events_path: String::new(),
             git_remote_url: String::new(),
             git_autocrlf: "false".to_string(),
             output_path: output.to_string(),
