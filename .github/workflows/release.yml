@@ -17,6 +17,11 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # Раннер собирает тулчейном msvc, и по умолчанию exe тянет VCRUNTIME140.dll
+  # и api-ms-win-crt-*.dll — на машине без Visual C++ Redistributable он не
+  # запустится. Статическая линковка CRT возвращает самодостаточный бинарник,
+  # каким он был при локальной сборке тулчейном gnu.
+  RUSTFLAGS: '-C target-feature=+crt-static'
 
 jobs:
   windows:

@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [3.2.1] — 2026-09-20
+
+### Исправлено
+
+- Бинарник в GitHub-релизе больше не требует Visual C++ Redistributable: сборка на раннере идёт тулчейном `msvc`, и exe тянул `VCRUNTIME140.dll` с `api-ms-win-crt-*.dll`. Добавлена статическая линковка CRT (`-C target-feature=+crt-static`) — на чистой Windows Server программа запускается без доустановки библиотек. Бинарник из релиза 3.2.0 этой зависимостью обладал.
+- Замечания `clippy` версии 1.98 (`useless_borrows_in_formatting` в `eventlog_watcher.rs` и `mcp_client.rs`, `collapsible_match` в `export.rs` и `v8container/meta/external_report.rs`). Поведение не изменилось.
+
 ## [3.2.0] — 2026-09-20
 
 ### Добавлено
