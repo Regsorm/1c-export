@@ -1,0 +1,101 @@
+# Выпуск: сборка Windows-бинарника и публикация релиза по отправке тега vX.Y.Z.
+#
+# Гейт качества (cargo fmt --check + clippy) встроен в build.rs и срабатывает
+# при каждой сборке. Здесь он вынесен в отдельные шаги — так видно, какая
+# именно проверка упала, — а в шагах тестов и сборки отключается через
+# ONEC_EXPORT_SKIP_QUALITY_GATE, чтобы не гонять одно и то же трижды.
+
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    name: Сборка и публикация (Windows x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Получение исходников
+        uses: actions/checkout@v4
+
+      - name: Тулчейн Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Кеш cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Проверка форматирования
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (предупреждения запрещены)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Тесты
+        env:
+          ONEC_EXPORT_SKIP_QUALITY_GATE: '1'
+        run: cargo test --all-features
+
+      - name: Сборка release
+        env:
+          ONEC_EXPORT_SKIP_QUALITY_GATE: '1'
+        run: cargo build --release
+
+      - name: Сверка версии с тегом
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}' -replace '^v', ''
+          $manifest = Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1
+          $version = $manifest.Matches[0].Groups[1].Value
+          if ($tag -ne $version) {
+            Write-Error "Тег $tag не совпадает с version = $version в Cargo.toml"
+            exit 1
+          }
+          Write-Host "Версия и тег совпадают: $version"
+
+      - name: Контрольная сумма
+        shell: pwsh
+        run: |
+          $exe = 'target/release/1c-export.exe'
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  1c-export.exe" | Out-File -FilePath "$exe.sha256" -Encoding ascii -NoNewline
+          Write-Host "sha256: $hash"
+
+      - name: Описание релиза из CHANGELOG
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}' -replace '^v', ''
+          $lines = Get-Content CHANGELOG.md
+          $start = $null
+          $end = $lines.Count
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match "^## \[$([regex]::Escape($version))\]") { $start = $i + 1; continue }
+            if ($null -ne $start -and $lines[$i] -match '^## \[') { $end = $i; break }
+          }
+          if ($null -eq $start) {
+            Write-Error "В CHANGELOG.md нет раздела ## [$version]"
+            exit 1
+          }
+          $body = $lines[$start..($end - 1)] -join "`n"
+          $body = $body.Trim()
+          $body += "`n`nГотовый бинарник: ``1c-export.exe`` (Windows x64, без установки). Контрольная сумма — в ``1c-export.exe.sha256``."
+          Set-Content -Path release-notes.md -Value $body -Encoding utf8
+
+      - name: Публикация релиза
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: |
+            target/release/1c-export.exe
+            target/release/1c-export.exe.sha256
