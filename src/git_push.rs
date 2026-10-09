@@ -76,7 +76,12 @@ impl GitOptions {
 /// - `gc.auto=0` — передаётся всегда: автоматическая упаковка не должна
 ///   запускаться посреди коммита (на первом коммите крупной базы она занимала
 ///   больше часа); упаковкой управляет параметр базы `gitGcAfterPush`, явный
-///   `git gc` этим не блокируется.
+///   `git gc` этим не блокируется;
+/// - `core.longpaths=true` — передаётся всегда: в `External/` попадают пути длиннее
+///   260 символов (имя обработки + `DataProcessors/<длинное имя>/<длинное имя>.xml`),
+///   и без этого `git add -A` падает с `Filename too long` (код 128). Параметр
+///   действует на одну команду git, поэтому настраивать `core.longpaths` в каждом
+///   репозитории выгрузки вручную не нужно.
 fn config_args(opts: &GitOptions) -> Vec<String> {
     let mut args = Vec::new();
     let autocrlf = opts.autocrlf.trim();
@@ -86,6 +91,8 @@ fn config_args(opts: &GitOptions) -> Vec<String> {
     }
     args.push("-c".to_string());
     args.push("gc.auto=0".to_string());
+    args.push("-c".to_string());
+    args.push("core.longpaths=true".to_string());
     args
 }
 
@@ -714,20 +721,34 @@ mod tests {
 
     #[test]
     fn config_args_passes_autocrlf_and_always_disables_gc() {
-        // По умолчанию — core.autocrlf=false, gc.auto=0 всегда.
+        // По умолчанию — core.autocrlf=false, gc.auto=0 и core.longpaths=true всегда.
         assert_eq!(
             config_args(&GitOptions::default()),
-            vec!["-c", "core.autocrlf=false", "-c", "gc.auto=0"]
+            vec![
+                "-c",
+                "core.autocrlf=false",
+                "-c",
+                "gc.auto=0",
+                "-c",
+                "core.longpaths=true"
+            ]
         );
         // Значение из настроек передаётся как есть.
         assert_eq!(
             config_args(&GitOptions::new("input")),
-            vec!["-c", "core.autocrlf=input", "-c", "gc.auto=0"]
+            vec![
+                "-c",
+                "core.autocrlf=input",
+                "-c",
+                "gc.auto=0",
+                "-c",
+                "core.longpaths=true"
+            ]
         );
         // Пустое значение — параметр не передаётся, действует настройка машины.
         assert_eq!(
             config_args(&GitOptions::new("   ")),
-            vec!["-c", "gc.auto=0"]
+            vec!["-c", "gc.auto=0", "-c", "core.longpaths=true"]
         );
 
         // Те же аргументы попадают в саму команду, после `-C <каталог>`.
@@ -744,7 +765,9 @@ mod tests {
                 "-c",
                 "core.autocrlf=false",
                 "-c",
-                "gc.auto=0"
+                "gc.auto=0",
+                "-c",
+                "core.longpaths=true"
             ]
         );
     }
