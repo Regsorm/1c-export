@@ -6,6 +6,7 @@
 //!      по `_Marked=0 AND _Folder=1`.
 //!   4. Сравнить с манифестом: new / changed / unchanged / deleted.
 //!   5. Тяжёлый SELECT по changed+new — только поле `<ХранилищеОбработки>`.
+//!      Ссылки `STORHDR` (вынесенное тело) дочитываются из таблицы `BinaryData`.
 //!   6. Распаковать ValueStorage (два варианта заголовка: `0x02 0x01` сжатый raw-DEFLATE
 //!      offset=18, или `0x01 0x01` несжатый offset=2 + маркер `0xFF 0xFF 0xFF 0x7F`).
 //!   7. Сверить MD5 распакованного с `КонтрольнаяСумма` из БД (реквизит БСП).
@@ -107,7 +108,8 @@ pub struct ProcessingsResult {
     pub deleted: usize,
     /// Настоящие ошибки распаковки / записи (нужно внимание).
     pub failed: Vec<(String, String)>,
-    /// Пустые записи (зарегистрирована обработка без .epf-файла), не ошибка.
+    /// Записи без доступного тела: ссылка на вынесенное хранилище, по которой
+    /// тело в `BinaryData` не нашлось. Не ошибка выгрузки.
     pub skipped_empty: Vec<String>,
     /// Имена (sanitized) файлов .epf, которые были скачаны в этом прогоне
     /// (new + changed). Используется для последующего XML-разбора только
@@ -197,12 +199,120 @@ fn find_subseq(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|w| w == needle)
 }
 
-/// ValueStorage → бинарь .epf/.erf. Два формата заголовка.
-/// Возвращает Err(Empty) для пустых записей (STORHDR / нет бинарника) —
-/// обработка существует в справочнике, но без сохранённого .epf-файла.
-pub fn value_storage_to_binary(vs: &[u8]) -> Result<Vec<u8>, ExportError> {
-    use std::io::Read;
+/// Заголовок ссылки на вынесенное хранилище двоичных данных 1С (таблица `BinaryData`).
+const STORHDR_HEADER: &[u8] = b"STORHDR";
+/// Смещение ключа в ссылке (0-based): 16 байт заголовка, дальше сам ключ.
+const STORHDR_KEY_OFFSET: usize = 16;
+/// Длина ключа вынесенного хранилища (`f_key`).
+const STORHDR_KEY_LEN: usize = 16;
+/// Сигнатура начала v8-контейнера (.epf/.erf/.cf/.cfe).
+const V8_MARKER: &[u8] = &[0xFF, 0xFF, 0xFF, 0x7F];
 
+/// Ключ вынесенного хранилища из ссылки `STORHDR`. `None` — блоб не ссылка.
+pub fn storhdr_key(vs: &[u8]) -> Option<&[u8]> {
+    if !vs.starts_with(STORHDR_HEADER) || vs.len() < STORHDR_KEY_OFFSET + STORHDR_KEY_LEN {
+        return None;
+    }
+    Some(&vs[STORHDR_KEY_OFFSET..STORHDR_KEY_OFFSET + STORHDR_KEY_LEN])
+}
+
+/// HEX в верхнем регистре — для журнала и сообщений об ошибках.
+fn hex_upper(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{:02X}", b)).collect()
+}
+
+/// Raw DEFLATE (wbits = -15, без zlib-обёртки) — именно так 1С пишет сжатое
+/// ХранилищеЗначения.
+fn inflate_raw(data: &[u8]) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let mut decoder = flate2::read::DeflateDecoder::new(data);
+    let mut decoded = Vec::new();
+    decoder.read_to_end(&mut decoded).ok()?;
+    Some(decoded)
+}
+
+/// Итог разбора блоба: контейнер (если нашли) и признаки для понятного диагноза.
+struct ExtractOutcome {
+    /// Байты v8-контейнера от маркера `FF FF FF 7F`.
+    binary: Option<Vec<u8>>,
+    /// Заголовок ValueStorage распознан (`0x01 0x01` или `0x02 0x01`).
+    known_header: bool,
+    /// Размер распакованных DEFLATE-данных, если распаковка прошла.
+    decoded_len: Option<usize>,
+}
+
+/// Достать v8-контейнер из буфера: сначала по штатным заголовкам ValueStorage,
+/// затем «поиском маркера» — так выглядят тела, вынесенные в таблицу `BinaryData`
+/// (там заголовок прикладного поля может отсутствовать).
+///
+/// Если контейнера нет, возвращает признаки для диагноза: «формат не наш» и
+/// «формат наш, а внутри не контейнер» — разные случаи (в хранилище лежит,
+/// например, шаблон договора, а не обработка).
+fn extract_v8_container(data: &[u8]) -> ExtractOutcome {
+    let mut outcome = ExtractOutcome {
+        binary: None,
+        known_header: false,
+        decoded_len: None,
+    };
+
+    // 1. Штатный сжатый формат: 18 байт заголовка + raw DEFLATE.
+    if data.len() > 18 && data[0] == 0x02 && data[1] == 0x01 {
+        outcome.known_header = true;
+        if let Some(decoded) = inflate_raw(&data[18..]) {
+            outcome.decoded_len = Some(decoded.len());
+            if let Some(pos) = find_subseq(&decoded, V8_MARKER) {
+                outcome.binary = Some(decoded[pos..].to_vec());
+                return outcome;
+            }
+        }
+    }
+
+    // 2. Штатный несжатый формат: тело начинается со 2-го байта.
+    if data.len() > 2 && data[0] == 0x01 && data[1] == 0x01 {
+        outcome.known_header = true;
+        if let Some(pos) = find_subseq(&data[2..], V8_MARKER) {
+            outcome.binary = Some(data[2 + pos..].to_vec());
+            return outcome;
+        }
+    }
+
+    // 3. Тело без заголовка — маркер ищем по всему буферу.
+    if let Some(pos) = find_subseq(data, V8_MARKER) {
+        outcome.binary = Some(data[pos..].to_vec());
+        return outcome;
+    }
+
+    // 4. Сжатый поток без заголовка: пробуем распаковать с типовых смещений.
+    for skip in [0usize, 2, 18] {
+        if data.len() <= skip {
+            continue;
+        }
+        if let Some(decoded) = inflate_raw(&data[skip..]) {
+            if outcome.decoded_len.is_none() {
+                outcome.decoded_len = Some(decoded.len());
+            }
+            if let Some(pos) = find_subseq(&decoded, V8_MARKER) {
+                outcome.binary = Some(decoded[pos..].to_vec());
+                return outcome;
+            }
+        }
+    }
+
+    outcome
+}
+
+/// Блоб колонки `ХранилищеОбработки` → байты v8-контейнера (.epf/.erf).
+///
+/// В прикладной таблице встречаются три состояния блоба:
+///   * `0x02 0x01` — сжатый raw-DEFLATE (18-байтовый заголовок);
+///   * `0x01 0x01` — несжатый (тело со 2-го байта);
+///   * `STORHDR` + 16-байтовый ключ — **ссылка**: тело платформа вынесла в
+///     служебную таблицу `BinaryData` (см. `resolve_external_blobs`). Сюда
+///     такая ссылка попадает только если дочитать тело не удалось.
+///
+/// Возвращает `Err(ValueStorageExternal)` для ссылки (запись пропускается
+/// вызывающим кодом) и `Err(ValueStorage)` для всего остального.
+pub fn value_storage_to_binary(vs: &[u8]) -> Result<Vec<u8>, ExportError> {
     if vs.len() < 2 {
         return Err(ExportError::ValueStorage(format!(
             "слишком короткий блок: {} байт",
@@ -210,85 +320,67 @@ pub fn value_storage_to_binary(vs: &[u8]) -> Result<Vec<u8>, ExportError> {
         )));
     }
 
-    // Заглушка "обработка пустая" — в справочнике есть запись, но файл не загружен.
-    // Платформа 1С записывает такой маркер когда ХранилищеОбработки Пустое/Неопределено
-    // или когда обработка зарегистрирована в БСП, но .epf-файл не привязан.
-    if vs.starts_with(b"STORHDR") {
-        return Err(ExportError::ValueStorage(
-            "STORHDR marker: обработка зарегистрирована без .epf-файла (пустое хранилище)".into(),
-        ));
+    if let Some(key) = storhdr_key(vs) {
+        return Err(ExportError::ValueStorageExternal(format!(
+            "ссылка STORHDR, ключ {} — тело лежит в таблице BinaryData",
+            hex_upper(key)
+        )));
     }
 
-    // Сигнатура начала v8-контейнера (.epf/.erf/.cf/.cfe).
-    const V8_MARKER: &[u8] = &[0xFF, 0xFF, 0xFF, 0x7F];
+    let outcome = extract_v8_container(vs);
+    if let Some(binary) = outcome.binary {
+        return Ok(binary);
+    }
 
-    match (vs[0], vs[1]) {
-        (0x02, 0x01) => {
-            const HEADER: usize = 18;
-            if vs.len() <= HEADER {
-                return Err(ExportError::ValueStorage(format!(
-                    "сжатый ValueStorage короче заголовка ({} ≤ {})",
-                    vs.len(),
-                    HEADER
-                )));
+    // Причина отказа: «формат не наш» и «формат наш, а контейнера внутри нет» —
+    // разные диагнозы, и в журнале их нужно различать.
+    let detail = if outcome.known_header {
+        match outcome.decoded_len {
+            Some(len) => format!(
+                "заголовок 0x{:02X} 0x{:02X} распознан, но v8-контейнера внутри нет \
+                 (распаковано {} байт) — содержимое хранилища не .epf/.erf",
+                vs[0], vs[1], len
+            ),
+            None => format!(
+                "заголовок 0x{:02X} 0x{:02X} распознан, но DEFLATE не распаковался \
+                 и v8-контейнера нет (размер={} байт)",
+                vs[0],
+                vs[1],
+                vs.len()
+            ),
+        }
+    } else {
+        format!(
+            "неизвестный заголовок ValueStorage: 0x{:02X} 0x{:02X} (размер={} байт)",
+            vs[0],
+            vs[1],
+            vs.len()
+        )
+    };
+
+    // Диагностика: первые 32 байта в hex + ASCII-префикс.
+    let preview_bytes = &vs[..vs.len().min(32)];
+    let hex: String = preview_bytes
+        .iter()
+        .map(|x| format!("{:02X}", x))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let ascii: String = preview_bytes
+        .iter()
+        .map(|&x| {
+            if (0x20..0x7F).contains(&x) {
+                x as char
+            } else {
+                '.'
             }
-            let mut decoder = flate2::read::DeflateDecoder::new(&vs[HEADER..]);
-            let mut decoded = Vec::with_capacity(vs.len() * 4);
-            decoder
-                .read_to_end(&mut decoded)
-                .map_err(|e| ExportError::ValueStorage(format!("DEFLATE упала: {}", e)))?;
-
-            // После DEFLATE лежит сериализованное ХранилищеЗначения, которое оборачивает
-            // ДвоичныеДанные с .epf внутри. Ищем сигнатуру v8-контейнера 0xFFFFFF7F —
-            // от неё начинается собственно .epf.
-            let pos = find_subseq(&decoded, V8_MARKER).ok_or_else(|| {
-                ExportError::ValueStorage(format!(
-                    "сжатый ValueStorage: маркер 0xFFFFFF7F (v8-контейнер) не найден в \
-                     распакованных данных (размер={} байт)",
-                    decoded.len()
-                ))
-            })?;
-            Ok(decoded[pos..].to_vec())
-        }
-        (0x01, 0x01) => {
-            let tail = &vs[2..];
-            let pos = find_subseq(tail, V8_MARKER).ok_or_else(|| {
-                ExportError::ValueStorage(
-                    "несжатый ValueStorage: маркер 0xFFFFFF7F не найден".into(),
-                )
-            })?;
-            Ok(tail[pos..].to_vec())
-        }
-        (a, b) => {
-            // Диагностика: первые 32 байта в hex + ASCII-префикс.
-            let preview_bytes = &vs[..vs.len().min(32)];
-            let hex: String = preview_bytes
-                .iter()
-                .map(|x| format!("{:02X}", x))
-                .collect::<Vec<_>>()
-                .join(" ");
-            let ascii: String = preview_bytes
-                .iter()
-                .map(|&x| {
-                    if (0x20..0x7F).contains(&x) {
-                        x as char
-                    } else {
-                        '.'
-                    }
-                })
-                .collect();
-            Err(ExportError::ValueStorage(format!(
-                "неизвестный заголовок ValueStorage: 0x{:02X} 0x{:02X} (размер={} байт)\n\
-                 первые 32 байта hex : {}\n\
-                 первые 32 байта ASCII: {}",
-                a,
-                b,
-                vs.len(),
-                hex,
-                ascii
-            )))
-        }
-    }
+        })
+        .collect();
+    Err(ExportError::ValueStorage(format!(
+        "{}\n\
+         первые 32 байта hex : {}\n\
+         первые 32 байта ASCII: {}",
+        detail, hex, ascii
+    )))
 }
 
 /// MD5 байт в UPPER HEX (формат, совместимый с реквизитом КонтрольнаяСумма БСП).
@@ -579,14 +671,224 @@ async fn fetch_blobs(
             let item = item.map_err(|e| ExportError::Sql(format!("blob stream: {}", e)))?;
             if let tiberius::QueryItem::Row(row) = item {
                 let uuid: &str = row_get_str(&row, "uuid")?;
-                let vs: &[u8] = row
+                // Пустое хранилище (NULL или нулевая длина) — это запись без файла,
+                // а не сбой чтения: кладём пустой блоб, а разбор пропустит запись
+                // отдельной ветвью. Раньше NULL ронял всю выгрузку целиком.
+                let vs: Vec<u8> = row
                     .get::<&[u8], _>("vs")
-                    .ok_or_else(|| ExportError::Sql("поле vs пустое".into()))?;
-                result.insert(uuid.to_string(), vs.to_vec());
+                    .map(|b| b.to_vec())
+                    .unwrap_or_default();
+                result.insert(uuid.to_string(), vs);
             }
         }
     }
     Ok(result)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Вынесенное хранилище двоичных данных (служебная таблица BinaryData)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Служебная таблица вынесенного хранилища: имя в текущей базе и колонки
+/// порядка частей значения (есть не во всех сборках платформы).
+struct BinaryStorageTable {
+    /// Квалифицированное имя, например `dbo.BinaryData`.
+    qualified: String,
+    /// Колонки, по которым собираются части одного значения.
+    order_columns: Vec<&'static str>,
+}
+
+/// Найти служебную таблицу вынесенного хранилища в текущей базе.
+///
+/// Платформа заводит её, когда перестаёт помещать крупные двоичные значения
+/// прямо в прикладные таблицы; на старых платформах таблицы нет — тогда `None`,
+/// и ссылки `STORHDR` остаются неразрешёнными (записи пропускаются, как раньше).
+async fn resolve_binary_storage_table(client: &mut TiberiusClient) -> Option<BinaryStorageTable> {
+    let sql = "SELECT TOP 1 s.name AS sch, t.name AS tbl \
+               FROM sys.tables t \
+               JOIN sys.schemas s ON s.schema_id = t.schema_id \
+               WHERE t.name = 'BinaryData' \
+                 AND EXISTS (SELECT 1 FROM sys.columns c \
+                             WHERE c.object_id = t.object_id AND c.name = 'f_key') \
+                 AND EXISTS (SELECT 1 FROM sys.columns c \
+                             WHERE c.object_id = t.object_id AND c.name = 'f_data') \
+               ORDER BY CASE WHEN s.name = 'dbo' THEN 0 ELSE 1 END";
+
+    // Первый поток закрываем до следующего запроса: tiberius занимает коннект
+    // на всё время чтения потока.
+    let mut found: Option<String> = None;
+    {
+        let mut stream = match client.simple_query(sql).await {
+            Ok(s) => s,
+            Err(_) => return None,
+        };
+        while let Some(item) = stream.next().await {
+            let item = match item {
+                Ok(i) => i,
+                Err(_) => return None,
+            };
+            if let tiberius::QueryItem::Row(row) = item {
+                let sch = row.get::<&str, _>("sch").unwrap_or("");
+                let tbl = row.get::<&str, _>("tbl").unwrap_or("");
+                if !sch.is_empty() && !tbl.is_empty() {
+                    found = Some(format!("{}.{}", sch, tbl));
+                }
+            }
+        }
+    }
+    let qualified = found?;
+
+    // Колонки порядка частей: `f_off` (смещение) и `f_num` (номер части).
+    let cols_sql = format!(
+        "SELECT c.name AS name FROM sys.columns c WHERE c.object_id = OBJECT_ID('{}')",
+        qualified.replace('\'', "''")
+    );
+    let mut order_columns: Vec<&'static str> = Vec::new();
+    if let Ok(mut cols) = client.simple_query(cols_sql).await {
+        let mut has_off = false;
+        let mut has_num = false;
+        while let Some(item) = cols.next().await {
+            if let Ok(tiberius::QueryItem::Row(row)) = item {
+                match row.get::<&str, _>("name").unwrap_or("") {
+                    "f_off" => has_off = true,
+                    "f_num" => has_num = true,
+                    _ => {}
+                }
+            }
+        }
+        if has_off {
+            order_columns.push("f_off");
+        }
+        if has_num {
+            order_columns.push("f_num");
+        }
+    }
+
+    Some(BinaryStorageTable {
+        qualified,
+        order_columns,
+    })
+}
+
+/// Дочитать тела, вынесенные платформой в служебную таблицу `BinaryData`.
+///
+/// В колонке справочника у таких записей лежит ссылка `STORHDR` + 16-байтовый
+/// ключ (`f_key`). Здесь ссылки подменяются собранными телами; ключ, которого
+/// в таблице нет, остаётся ссылкой — запись пропустит вызывающий код.
+///
+/// Возвращает `(разрешено ссылок, ключей не найдено)`.
+async fn resolve_external_blobs(
+    client: &mut TiberiusClient,
+    blobs: &mut std::collections::HashMap<String, Vec<u8>>,
+) -> (usize, usize) {
+    // UUID записи → HEX ключа вынесенного хранилища.
+    let mut refs: Vec<(String, String)> = Vec::new();
+    for (uuid, blob) in blobs.iter() {
+        if let Some(key) = storhdr_key(blob) {
+            refs.push((uuid.clone(), hex_upper(key)));
+        }
+    }
+    if refs.is_empty() {
+        return (0, 0);
+    }
+
+    let table = match resolve_binary_storage_table(client).await {
+        Some(t) => t,
+        None => {
+            Logger::log(&format!(
+                "⚠ ссылок на вынесенное хранилище: {}, но таблицы BinaryData в базе нет — записи будут пропущены",
+                refs.len()
+            ));
+            return (0, refs.len());
+        }
+    };
+
+    Logger::log(&format!(
+        "Вынесенное хранилище: таблица {}, ссылок {}",
+        table.qualified,
+        refs.len()
+    ));
+
+    let order = if table.order_columns.is_empty() {
+        String::new()
+    } else {
+        format!(", {}", table.order_columns.join(", "))
+    };
+
+    // Тела читаем батчами: ключ — binary(16), фильтр по IN-списку hex-литералов.
+    let mut bodies: std::collections::HashMap<String, Vec<u8>> = std::collections::HashMap::new();
+    for chunk in refs.chunks(500) {
+        let in_list = chunk
+            .iter()
+            .map(|(_, key)| format!("0x{}", key))
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT CONVERT(CHAR(32), f_key, 2) AS k, f_data AS d \
+             FROM {table} WITH (NOLOCK) \
+             WHERE f_key IN ({in_list}) \
+             ORDER BY CONVERT(CHAR(32), f_key, 2){order}",
+            table = table.qualified,
+            in_list = in_list,
+            order = order,
+        );
+
+        let mut stream = match client.simple_query(sql).await {
+            Ok(s) => s,
+            Err(e) => {
+                Logger::log(&format!("⚠ чтение вынесенного хранилища не удалось: {}", e));
+                return (0, refs.len());
+            }
+        };
+
+        while let Some(item) = stream.next().await {
+            let item = match item {
+                Ok(i) => i,
+                Err(e) => {
+                    Logger::log(&format!("⚠ поток вынесенного хранилища: {}", e));
+                    break;
+                }
+            };
+            if let tiberius::QueryItem::Row(row) = item {
+                let key: &str = match row.get::<&str, _>("k") {
+                    Some(k) => k,
+                    None => continue,
+                };
+                let data: &[u8] = match row.get::<&[u8], _>("d") {
+                    Some(d) => d,
+                    None => continue,
+                };
+                // Части одного значения идут по порядку (ORDER BY) — склеиваем.
+                bodies
+                    .entry(key.to_uppercase())
+                    .or_default()
+                    .extend_from_slice(data);
+            }
+        }
+    }
+
+    let mut resolved = 0usize;
+    let mut missing = 0usize;
+    let mut total_bytes = 0usize;
+    for (uuid, key) in refs {
+        match bodies.get(&key) {
+            Some(body) if !body.is_empty() => {
+                total_bytes += body.len();
+                blobs.insert(uuid, body.clone());
+                resolved += 1;
+            }
+            _ => missing += 1,
+        }
+    }
+
+    if resolved > 0 {
+        Logger::log(&format!(
+            "✓ Вынесенное хранилище: разрешено ссылок {}, суммарно {} байт",
+            resolved, total_bytes
+        ));
+    }
+
+    (resolved, missing)
 }
 
 fn row_get_str<'a>(row: &'a Row, col: &str) -> Result<&'a str, ExportError> {
@@ -981,11 +1283,21 @@ async fn run_async(
     };
 
     // Тяжёлый запрос.
-    let blobs = if to_fetch.is_empty() {
+    let mut blobs = if to_fetch.is_empty() {
         std::collections::HashMap::new()
     } else {
         fetch_blobs(&mut client, &params.mapping, &to_fetch).await?
     };
+
+    // Часть тел платформа держит не в колонке справочника, а в служебной таблице
+    // BinaryData: в колонке остаётся ссылка STORHDR + 16-байтовый ключ.
+    let (_, external_missing) = resolve_external_blobs(&mut client, &mut blobs).await;
+    if external_missing > 0 {
+        Logger::log(&format!(
+            "ℹ вынесенное хранилище: тел не найдено по {} ссылкам — записи будут пропущены",
+            external_missing
+        ));
+    }
 
     // Обход changed+new.
     let row_map: std::collections::HashMap<String, &DbRow> =
@@ -1005,6 +1317,14 @@ async fn run_async(
                 continue;
             }
         };
+        if vs.is_empty() {
+            Logger::log(&format!(
+                "ℹ {}: хранилище пустое (файл не привязан), пропущено",
+                row.name
+            ));
+            result.skipped_empty.push(row.name.clone());
+            continue;
+        }
         match process_entry(
             output_dir,
             row,
@@ -1023,19 +1343,18 @@ async fn run_async(
                 }
                 result.fresh_names.push(safe_name);
             }
+            // Ссылку на вынесенное хранилище дочитать не удалось: тела в базе нет.
+            Err(ExportError::ValueStorageExternal(msg)) => {
+                Logger::log(&format!(
+                    "ℹ {}: тело не найдено в вынесенном хранилище, пропущено ({})",
+                    row.name, msg
+                ));
+                result.skipped_empty.push(row.name.clone());
+            }
             Err(e) => {
                 let msg = e.to_string();
-                // Пустая запись (нет .epf) — не ошибка, просто пропускаем.
-                if msg.contains("STORHDR") {
-                    Logger::log(&format!(
-                        "ℹ {}: пустая обработка (нет .epf), пропущено",
-                        row.name
-                    ));
-                    result.skipped_empty.push(row.name.clone());
-                } else {
-                    Logger::log(&format!("⚠ {}: {}", row.name, msg));
-                    result.failed.push((row.name.clone(), msg));
-                }
+                Logger::log(&format!("⚠ {}: {}", row.name, msg));
+                result.failed.push((row.name.clone(), msg));
             }
         }
     }
@@ -1249,5 +1568,69 @@ mod tests {
         expected.extend_from_slice(&v8_marker);
         expected.extend_from_slice(epf_body);
         assert_eq!(decoded, expected);
+    }
+
+    #[test]
+    fn storhdr_reference_is_not_empty_record() {
+        // Ссылка на вынесенное хранилище: заголовок STORHDR + 16-байтовый ключ.
+        let mut vs = Vec::new();
+        vs.extend_from_slice(b"STORHDR");
+        vs.extend_from_slice(&[0u8; 9]);
+        vs.extend_from_slice(&[
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB,
+            0xCD, 0xEF,
+        ]);
+        assert_eq!(vs.len(), 32);
+        match value_storage_to_binary(&vs) {
+            Err(ExportError::ValueStorageExternal(msg)) => {
+                assert!(msg.contains("0123456789ABCDEF0123456789ABCDEF"), "{}", msg);
+            }
+            other => panic!("ожидалась ссылка на вынесенное хранилище: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn storhdr_key_offset_and_length() {
+        let mut vs = vec![0u8; 40];
+        vs[..7].copy_from_slice(b"STORHDR");
+        vs[16] = 0xAA;
+        vs[31] = 0xBB;
+        let key = storhdr_key(&vs).expect("ключ должен читаться");
+        assert_eq!(key.len(), 16);
+        assert_eq!(key[0], 0xAA);
+        assert_eq!(key[15], 0xBB);
+        // Слишком короткий блоб ссылкой не считается.
+        assert!(storhdr_key(b"STORHDR").is_none());
+    }
+
+    #[test]
+    fn decode_raw_body_without_header() {
+        // Тело из вынесенного хранилища может прийти без заголовка ValueStorage.
+        let mut body = Vec::new();
+        body.extend_from_slice(b"wrapper-bytes");
+        body.extend_from_slice(&[0xFFu8, 0xFF, 0xFF, 0x7F]);
+        body.extend_from_slice(b"epf");
+        let mut expected = vec![0xFFu8, 0xFF, 0xFF, 0x7F];
+        expected.extend_from_slice(b"epf");
+        assert_eq!(value_storage_to_binary(&body).unwrap(), expected);
+    }
+
+    #[test]
+    fn decode_deflated_body_without_header() {
+        use std::io::Write;
+        let mut payload = Vec::new();
+        payload.extend_from_slice(b"prefix");
+        payload.extend_from_slice(&[0xFFu8, 0xFF, 0xFF, 0x7F]);
+        payload.extend_from_slice(b"epf-body");
+        let mut compressed = Vec::new();
+        {
+            let mut encoder =
+                flate2::write::DeflateEncoder::new(&mut compressed, flate2::Compression::fast());
+            encoder.write_all(&payload).unwrap();
+            encoder.finish().unwrap();
+        }
+        let mut expected = vec![0xFFu8, 0xFF, 0xFF, 0x7F];
+        expected.extend_from_slice(b"epf-body");
+        assert_eq!(value_storage_to_binary(&compressed).unwrap(), expected);
     }
 }
